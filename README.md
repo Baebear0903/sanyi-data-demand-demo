@@ -91,6 +91,8 @@ pnpm deploy:github             # 正式发布：本地校验 + 构建 + 推送�
   再推到远端 `main` —— 只发布 **git 已跟踪**的内容，`dist/`、`offline/`、`node_modules/` 天然进不去。
 - 发布前会先跑 `check:recipes` + `vue-tsc` + 构建，任一失败即中止，远端不会出现半成品。
 - `main` 一更新即触发 Pages 自动部署；用 `gh run list --repo Baebear0903/sanyi-data-demand-demo` 看进度。
+- **不要用 `git push` 发这个仓库**：本地是「文档 + demo」的完整开发仓库，`git push` 会把迭代文档一起推上去。
+  发布只走 `pnpm deploy:github`；本地 `main` 与远端 `main` 是两条线（这正是为了只发代码）。
 - **一次性**：`pnpm deploy:github:fresh`（`--fresh-history`）用于把远端换成一个干净的初始提交
   （内容 = 当前 demo 树，不带旧历史）。只有在“收敛发布范围”时才需要跑一次。
 - 若本机 `github.com:443` 连不上（常见于被解析到不可达 IP），脚本会自动改用固定可用 IP 重试；
