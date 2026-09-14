@@ -1,0 +1,200 @@
+/* ==========================================================================
+   tokens.css —— 设计令牌（唯一视觉可变层）
+   --------------------------------------------------------------------------
+   基线：B 端管理后台 / 政务信息化观感
+     · 沉稳深蓝主色（低饱和、低明度），彩色只留给语义状态
+     · 深色侧栏 + 白色顶栏 + 浅灰内容底 + 白色卡片
+     · 全部图标为单色线性图标（Element Plus 图标组件），不使用 emoji
+   所有对比度已按 WCAG 2.1 校验（正文 ≥ 4.5:1，大字号/图形 ≥ 3:1）。
+   ⚠ 换肤只改本文件；同时覆盖 Element Plus 变量，保证第三方组件同色系。
+   ========================================================================== */
+
+:root {
+  /* ------------------------------------------------ 品牌主色（沉稳深蓝） -- */
+  --brand-50:  #eef3f9;
+  --brand-100: #dbe6f2;
+  --brand-200: #b9cde4;
+  --brand-300: #8aabd0;
+  --brand-400: #5585b5;
+  --brand-500: #2a5fa3;
+  --brand-600: #1f4e8c;   /* 主色，白字对比度 8.31:1 */
+  --brand-700: #173d6e;
+  --brand-800: #122f55;
+  --brand-900: #0d2340;
+
+  /* ------------------------------------------------ 侧栏（深蓝同色系） -- */
+  --side-bg:        #1b3253;   /* 深蓝（与主色同色系），白字对比 12.9:1 */
+  --side-bg-deep:   #142640;
+  --side-group:     #8194ab;
+  --side-text:      #c6d2e2;
+  --side-text-on:   #ffffff;
+  --side-hover:     rgba(255, 255, 255, .07);
+  --side-active:    var(--brand-600);
+  --side-active-bg: rgba(42, 92, 158, .28);
+  --side-border:    rgba(255, 255, 255, .08);
+  --side-width:     216px;
+  --side-width-collapsed: 60px;
+
+  /* ------------------------------------------------------------- 顶栏 -- */
+  /*
+   * 顶栏为通栏顶层，颜色比侧栏更深一档，形成层级：
+   *   顶栏 #132038（最深）→ 侧栏 #1b3253 → 内容区浅灰
+   * 白字对比 16.26:1，与侧栏差异 1.26:1（可辨识但不刺眼）。
+   */
+  --topbar-bg:      #132038;
+  --topbar-bg-deep: #0e1929;
+  --topbar-text:    #ffffff;
+  --topbar-text-2:  #b9c6d8;
+  --topbar-border:  rgba(255, 255, 255, .08);
+  --topbar-hover:   rgba(255, 255, 255, .10);
+  /* 激活页签底色：需明显亮于顶栏底色（差异 2.29:1），白字对比 5.63:1 */
+  --topbar-active:  #2f68b0;
+  --topbar-field:   rgba(255, 255, 255, .12);
+  --topbar-field-bd: rgba(255, 255, 255, .20);
+  --topbar-h:       56px;
+
+  /* ----------------------------------------------------------- 中性色 -- */
+  --bg:        #f4f6f9;
+  --surface:   #ffffff;
+  --surface-2: #f7f9fc;
+  --surface-3: #eef1f6;
+  --border:    #e4e8ee;
+  --border-2:  #eef1f5;
+  --text:      #1f2733;
+  --text-2:    #5c6b7f;
+  --text-3:    #8f9bab;
+  --text-4:    #a9b3c1;
+
+  /* ----------------------------------------------------------- 语义色 -- */
+  /* 语义色只用于状态标签 / 告警 / 风险等级，不作装饰 */
+  --success:    #17a35a;
+  --success-fg: #0f7a43;   /* 用于浅底上的文字，对比度 4.89:1 */
+  --success-bg: #e8f7ef;
+  --warning:    #e08a1e;
+  --warning-fg: #8a5a00;   /* 对比度 5.44:1 */
+  --warning-bg: #fdf4e7;
+  --danger:     #e04b4b;
+  --danger-fg:  #b93a3a;   /* 对比度 4.93:1 */
+  --danger-bg:  #fdecec;
+  --info:       #1f4e8c;
+  --info-fg:    #1f4e8c;
+  --info-bg:    #eef3f9;
+  --neutral:    #6b7a8d;
+  --neutral-fg: #5c6b7f;
+  --neutral-bg: #f0f2f6;
+  --purple:     #6b4fa8;
+  --purple-fg:  #5b3f96;
+  --purple-bg:  #f2edfb;
+  --teal:       #0e7f8c;
+  --teal-fg:    #0b6b76;
+  --teal-bg:    #e6f5f6;
+
+  /* --------------------------------------------------------- 图表配色 -- */
+  /* 图表需多序列区分，保留色彩；但降低饱和度以贴合沉稳基调 */
+  --chart-1: #1f4e8c;
+  --chart-2: #2f8f7f;
+  --chart-3: #c98a2b;
+  --chart-4: #6b4fa8;
+  --chart-5: #3f7fa6;
+  --chart-6: #b4553f;
+  --chart-7: #6f7f95;
+  --chart-8: #a8862b;
+
+  /* ------------------------------------------------------------- 圆角 -- */
+  --r-xs: 2px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-pill: 999px;
+
+  /* ------------------------------------------------------------- 阴影 -- */
+  --sh-1: 0 1px 2px rgba(18, 35, 58, .04);
+  --sh-2: 0 2px 8px rgba(18, 35, 58, .06);
+  --sh-3: 0 6px 20px rgba(18, 35, 58, .10);
+  --sh-pop: 0 8px 28px rgba(18, 35, 58, .14);
+  --sh-card: 0 1px 3px rgba(18, 35, 58, .05);
+
+  /* ------------------------------------------------------------- 间距 -- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+
+  /* ------------------------------------------------------------- 字号 -- */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 15px;
+  --fs-xl: 16px;
+  --fs-2xl: 18px;
+  --fs-3xl: 24px;
+  --fs-4xl: 28px;
+
+  --lh-tight: 1.35;
+  --lh-base: 1.6;
+
+  /* ------------------------------------------------------------- 字体 -- */
+  --ff-base: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB",
+             "Noto Sans SC", "Source Han Sans SC", system-ui, -apple-system,
+             "Segoe UI", Roboto, sans-serif;
+  --ff-num: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* --------------------------------------------------------- 控件尺寸 -- */
+  --h-ctrl-sm: 28px;
+  --h-ctrl: 32px;
+  --h-ctrl-lg: 36px;
+
+  /* ------------------------------------------------------------- 层级 -- */
+  --z-sticky: 20;
+  --z-drawer: 100;
+  --z-modal: 200;
+  --z-toast: 300;
+
+  --t-fast: .12s ease;
+  --t-base: .2s ease;
+}
+
+/* ==========================================================================
+   Element Plus 变量覆盖
+   ========================================================================== */
+:root {
+  --el-color-primary: var(--brand-600);
+  --el-color-primary-light-3: var(--brand-400);
+  --el-color-primary-light-5: var(--brand-300);
+  --el-color-primary-light-7: var(--brand-200);
+  --el-color-primary-light-8: var(--brand-100);
+  --el-color-primary-light-9: var(--brand-50);
+  --el-color-primary-dark-2: var(--brand-700);
+
+  --el-color-success: var(--success);
+  --el-color-warning: var(--warning);
+  --el-color-danger: var(--danger);
+  --el-color-error: var(--danger);
+  --el-color-info: var(--neutral);
+
+  --el-text-color-primary: var(--text);
+  --el-text-color-regular: var(--text-2);
+  --el-text-color-secondary: var(--text-3);
+  --el-text-color-placeholder: var(--text-4);
+  --el-border-color: var(--border);
+  --el-border-color-light: var(--border-2);
+  --el-border-color-lighter: var(--border-2);
+  --el-fill-color-blank: var(--surface);
+  --el-bg-color: var(--surface);
+  --el-bg-color-page: var(--bg);
+
+  --el-border-radius-base: var(--r-md);
+  --el-border-radius-small: var(--r-sm);
+  --el-font-size-base: var(--fs-md);
+
+  --el-component-size: var(--h-ctrl);
+  --el-component-size-small: var(--h-ctrl-sm);
+  --el-component-size-large: var(--h-ctrl-lg);
+
+  --el-box-shadow-light: var(--sh-2);
+  --el-box-shadow: var(--sh-3);
+}

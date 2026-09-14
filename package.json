@@ -1,0 +1,40 @@
+{
+  "name": "drm-demo",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "description": "三医数据底座 · 数据服务管理工具 · 数据需求管理模块 —— 纯前端静态演示系统（产品功能验收用）",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "build:only": "vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "check:recipes": "node scripts/check-recipes.mjs",
+    "gen:feature-list": "node scripts/gen-feature-list.mjs",
+    "gen:recipes": "node scripts/gen-recipes.mjs",
+    "verify": "node scripts/check-recipes.mjs && vue-tsc --noEmit",
+    "preview": "vite preview --port 4173",
+    "serve": "vite preview --port 4173",
+    "preview:pages": "vite preview --port 4174 --base /sanyi-data-demand-demo/",
+    "build:offline": "vite build --config vite.config.offline.ts",
+    "deploy:github": "node scripts/deploy-github.mjs",
+    "deploy:github:preview": "node scripts/deploy-github.mjs --dry-run",
+    "deploy:github:fresh": "node scripts/deploy-github.mjs --fresh-history"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "~2.3.1",
+    "element-plus": "~2.8.8",
+    "pinia": "2.2.4",
+    "vue": "~3.4.38",
+    "vue-router": "~4.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@vitejs/plugin-vue": "~5.1.4",
+    "typescript": "~5.5.4",
+    "vite": "~5.4.21",
+    "vite-plugin-singlefile": "^2.0.2",
+    "vue-tsc": "~2.1.10"
+  }
+}

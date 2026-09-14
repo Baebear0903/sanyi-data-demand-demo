@@ -1,0 +1,31 @@
+# ---- 依赖与构建产物（可重新生成，不入库） ----
+node_modules/
+dist/
+offline/
+*.tsbuildinfo
+.vite/
+
+# 离线单文件构建的残留产物（真实产物是 offline/数据需求管理-演示系统.html）
+favicon.svg
+
+# ---- 包管理器日志 ----
+.pnpm-debug.log*
+npm-debug.log*
+yarn-error.log*
+
+# ---- 编辑器与系统文件 ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ---- 本地环境与临时文件 ----
+.env.local
+.env.*.local
+*.local
+tmp/
+*.tmp
+
+# 注意：不要忽略 .github/ —— Pages 自动部署工作流就在 demo/.github/workflows/ 下，
+# 发布时它会被放到远端仓库根目录（远端仓库 = 本目录内容）。

@@ -1,0 +1,64 @@
+# 构建演示系统并发布到 GitHub Pages
+#
+# 说明：
+#  · 本目录（demo/）就是远端仓库 https://github.com/Baebear0903/sanyi-data-demand-demo 的根目录：
+#    由 demo/scripts/deploy-github.mjs 把 demo/ 的提交树推成远端 main，所以这里用的是仓库根相对路径。
+#  · 演示系统为纯前端静态站点，路由使用 Hash 模式、资源使用相对路径（base: './'），
+#    因此可直接部署到项目子路径 https://<user>.github.io/<repo>/ 而无需额外配置。
+#  · 触发条件：推送到 main（任何改动都构建一次），或手动触发（workflow_dispatch）。
+name: Deploy demo to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Add .nojekyll
+        run: touch dist/.nojekyll
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
