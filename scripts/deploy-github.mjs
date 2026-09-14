@@ -294,24 +294,41 @@ async function publishIncremental() {
     fail('远端 main 还没有提交，请先用 --fresh-history 建立初始发布提交')
   }
 
-  const isAncestor = gitTry(['merge-base', '--is-ancestor', remoteSha, head]).ok === true
-  const sameContent = git(['rev-parse', `${remoteSha}^{tree}`]) === demoTree
-
-  if (!isAncestor) {
-    fail(
-      `远端 ${REMOTE}/${BRANCH}（${remoteSha.slice(0, 8)}）不是当前 HEAD 的祖先，无法增量发布：\n` +
-        `      远端历史可能被重写过（例如本脚本的 --fresh-history），或本机落后于远端。\n` +
-        `      解决办法：先 git fetch && git log --oneline ${REMOTE}/${BRANCH}，确认后再处理；\n` +
-        `      若确实是从零重建，直接跑 node scripts/deploy-github.mjs --fresh-history。`
-    )
-  }
+  // 远端上的提交都是本脚本用 git commit-tree 生成的“发布快照”，与本地历史不是同一条线，
+  // 祖先关系永不成立，所以这里比较**内容**：远端那份内容必须是本地 HEAD:demo 的一部分。
+  // 远端内容 ⊆ 本地内容  ⇔  「把远端树与 demo 树相比不会删掉任何文件」。
+  const remoteTree = git(['rev-parse', `${remoteSha}^{tree}`])
+  const sameContent = remoteTree === demoTree
 
   if (sameContent) {
     console.log('\n✓ demo 内容与远端完全一致，无需发布。')
     return
   }
 
-  const changed = gitTry(['diff', '--name-status', `${remoteSha}^{tree}`, demoTree])
+  const remoteFileCount = git(['ls-tree', '-r', '--name-only', remoteTree]).split('\n').filter(Boolean).length
+  if (remoteFileCount === 0) {
+    fail(`远端树 ${remoteTree.slice(0, 8)} 是空的，无法增量发布（这种状态只能用 --fresh-history 覆盖）`)
+  }
+
+  const onlyRemovals = gitTry(['diff', '--diff-filter=D', '--name-only', remoteTree, demoTree])
+  if (!onlyRemovals.ok) {
+    fail(`无法比较远端内容与本地 demo 树：${onlyRemovals.err}`)
+  }
+  const removed = onlyRemovals.out.split('\n').filter(Boolean)
+  if (removed.length) {
+    fail(
+      `远端有 ${removed.length} 个文件在本地 HEAD 的 demo/ 里已经不存在（远端内容不是本地内容的一部分）：\n` +
+        removed
+          .slice(0, 15)
+          .map(f => `      · ${f}`)
+          .join('\n') +
+        `\n      通常是远端被别处改过，或本地缺少远端那份内容。\n` +
+        `      先确认：git fetch && gh api repos/Baebear0903/sanyi-data-demand-demo/contents\n` +
+        `      若远端内容应当被整体替换，跑 node scripts/deploy-github.mjs --fresh-history。`
+    )
+  }
+
+  const changed = gitTry(['diff', '--name-status', remoteTree, demoTree])
   if (changed.ok && changed.out) {
     console.log('\n  相对远端将要发生的改动：')
     console.log(

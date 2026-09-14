@@ -28,13 +28,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 不写 version：pnpm 版本由 package.json 的 packageManager（pnpm@9.15.4）决定。
+      # 若这里再写 version，pnpm/action-setup 会因“两个版本”直接报错（实测）。
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
