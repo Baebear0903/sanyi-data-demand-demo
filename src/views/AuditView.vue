@@ -9,13 +9,14 @@
  *  · 发布审计（6.5）：对发布项进行事后审计，确保每次升级闭环。
  *
  * 页面能力：字段级"变更前 → 变更后"对比、操作人 / 时间 / 来源 IP / 终端留痕、
- * 多条件检索与导出，并提供"快捷留痕操作"区，用于触发一次真实的写操作以验证留痕。
+ * 多条件检索与导出。本页**只读**：留痕由各业务单据的真实写操作自动写入，
+ * 审计中心不提供写操作入口。
  */
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useDemoStore } from '@/stores/demo'
-import { addDays, by, fmtDate, fmtTime, fromNow, iso, today, truncate } from '@/core/utils'
+import { addDays, by, fmtDate, fmtTime, fromNow, today, truncate } from '@/core/utils'
 import PageHead from '@/components/PageHead.vue'
 import StatCards from '@/components/StatCards.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -37,7 +38,19 @@ const BIZ_TYPES: { value: string; label: string; route?: (id: string) => string 
   { value: 'knowledges', label: '知识条目', route: id => `/kb/detail/${id}` },
   { value: 'subscriptions', label: '订阅单', route: id => `/delivery/detail/${id}` },
   { value: 'evaluations', label: '评价单', route: id => `/evaluation/detail/${id}` },
-  { value: 'tenants', label: '租户' }
+  { value: 'tenants', label: '租户' },
+  /* 以下表同样会产生审计留痕（无独立详情页，仅用于「单据类型」列与筛选下拉的正确显示） */
+  { value: 'workflows', label: '审批流程' },
+  { value: 'catalogItems', label: '服务目录项' },
+  { value: 'services', label: '服务产品' },
+  { value: 'incidentCategories', label: '事件分类配置' },
+  { value: 'incidentTemplates', label: '事件模板' },
+  { value: 'qnas', label: '知识问答' },
+  { value: 'capabilityApplies', label: '能力申请' },
+  { value: 'tenantRegs', label: '租户注册申请' },
+  { value: 'broadcasts', label: '广播记录' },
+  { value: 'callbacks', label: '回访记录' },
+  { value: 'deployRecords', label: '部署记录' }
 ]
 const bizLabel = (t: string) => BIZ_TYPES.find(b => b.value === t)?.label ?? t
 const bizRoute = (t: string, id: string) => BIZ_TYPES.find(b => b.value === t)?.route?.(id)
@@ -97,80 +110,6 @@ function resetFilter() {
   f.range = [fmtDate(addDays(today(), -365)), today()]
 }
 
-/* ============================================ 快捷留痕操作 -- */
-const lastAuditId = ref('')
-
-function rand<T>(list: T[]): T | undefined {
-  return list.length ? list[Math.floor(Math.random() * list.length)] : undefined
-}
-
-const quickOps = [
-  {
-    label: '随机审批一条待审批需求',
-    run: () => {
-      const d = rand((store.table('demands') as any[]).filter(x => x.status === 'PENDING_APPROVE'))
-      if (!d) { ElMessage.info('当前没有「待审批」的需求单'); return }
-      store.update('demands', d.id, { status: 'APPROVED', approver: store.user.name, approvedAt: iso() },
-        { action: '审批通过', remark: '快捷操作：审计留痕验证（需求单审批通过）' })
-      store.pushTimeline(d, { action: '审批通过', comment: '快捷操作：审计留痕验证' })
-      return `需求单 ${d.no} 审批通过`
-    }
-  },
-  {
-    label: '随机受理一条待受理需求',
-    run: () => {
-      const d = rand((store.table('demands') as any[]).filter(x => x.status === 'PENDING_ACCEPT'))
-      if (!d) { ElMessage.info('当前没有「待受理」的需求单'); return }
-      store.update('demands', d.id, { status: 'PENDING_APPROVE', acceptedAt: iso(), currentHandler: store.user.name },
-        { action: '服务台受理', remark: '快捷操作：审计留痕验证（服务台受理）' })
-      store.pushTimeline(d, { action: '服务台受理', comment: '快捷操作：审计留痕验证' })
-      return `需求单 ${d.no} 已受理`
-    }
-  },
-  {
-    label: '随机关闭一条事件',
-    run: () => {
-      const i = rand((store.table('incidents') as any[]).filter(x => !['CLOSED', 'RESOLVED'].includes(x.status) && x.status !== 'NEW'))
-      if (!i) { ElMessage.info('当前没有可关闭的事件单'); return }
-      store.update('incidents', i.id, { status: 'CLOSED', resolvedAt: iso(), closeType: '一线解决' },
-        { action: '解决并关闭', remark: '快捷操作：审计留痕验证（事件关闭）' })
-      store.pushTimeline(i, { action: '解决并关闭', comment: '快捷操作：审计留痕验证' })
-      return `事件单 ${i.no} 已关闭`
-    }
-  },
-  {
-    label: '随机分派一条新建事件',
-    run: () => {
-      const i = rand((store.table('incidents') as any[]).filter(x => x.status === 'NEW'))
-      if (!i) { ElMessage.info('当前没有「新建」状态的事件单'); return }
-      const cats = store.table('incidentCategories') as any[]
-      const group = cats.find(c => c.id === i.categoryId)?.autoAssign ?? '运维中心 · 一线支持组'
-      store.update('incidents', i.id, { status: 'DISPATCHED', handlerGroup: group, handler: '徐鹏' },
-        { action: '事件分派', remark: `快捷操作：按分类自动分派至 ${group}` })
-      store.pushTimeline(i, { action: '事件分派', comment: `快捷操作：按分类自动分派至 ${group}` })
-      return `事件单 ${i.no} 已分派至${group}`
-    }
-  },
-  {
-    label: '随机提交一条评价审批',
-    run: () => {
-      const e = rand((store.table('evaluations') as any[]).filter(x => x.status === 'PENDING_APPROVE'))
-      if (!e) { ElMessage.info('当前没有「待审批」的评价单'); return }
-      store.update('evaluations', e.id, { status: 'APPROVED', approver: store.user.name, approvedAt: iso() },
-        { action: '评价审批通过', remark: '快捷操作：审计留痕验证（评价审批通过）' })
-      return `评价单 ${e.no} 审批通过`
-    }
-  }
-]
-
-function runQuickOp(op: typeof quickOps[number]) {
-  const text = op.run()
-  if (!text) return
-  const newest = (store.table('audits') as any[])[0]
-  lastAuditId.value = newest?.id ?? ''
-  ElMessage.success(`${text}；已新增审计记录：${newest?.action ?? ''}（${newest?.operator ?? ''} ${newest?.operatedAt ?? ''}）`)
-}
-
 /* ======================================================== 导出 -- */
 function exportAudits() {
   try {
@@ -208,21 +147,6 @@ function exportAudits() {
     </PageHead>
 
     <StatCards :items="stats" />
-
-    <!-- ================================================ 快捷留痕操作区 -- -->
-    <div class="card">
-      <div class="card__head">
-        <div class="card__title">快捷留痕操作</div>
-        <div class="card__sub">按钮会触发真实的数据写操作，下方审计列表将立即新增"字段级变更前后值"记录</div>
-        <div class="card__spacer" />
-        <StatusTag v-if="lastAuditId" label="刚刚已留痕" tone="success" />
-      </div>
-      <div class="card__body">
-        <div class="flex gap-2 wrap">
-          <el-button v-for="(op, i) in quickOps" :key="i" type="primary" plain @click="runQuickOp(op)">{{ op.label }}</el-button>
-        </div>
-      </div>
-    </div>
 
     <div class="grid grid--side">
       <!-- ============================================== 审计列表 -- -->
@@ -328,7 +252,7 @@ function exportAudits() {
             <template #empty>
               <div class="empty-box">
                 <div class="empty-box__icon"><el-icon><DocumentRemove /></el-icon></div>
-                <div class="empty-box__text">没有符合条件的审计记录，可调整筛选条件或使用上方快捷操作</div>
+                <div class="empty-box__text">没有符合条件的审计记录，可调整筛选条件</div>
               </div>
             </template>
           </el-table>

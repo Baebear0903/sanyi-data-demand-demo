@@ -544,7 +544,7 @@ const secretVisible = ref(false)
             <div class="cell-sub">{{ row.submittedAt ? fromNow(row.submittedAt) : '' }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button v-for="(a, i) in actionsOf(row).slice(0, 1)" :key="i" link :type="a.type === 'primary' ? 'primary' : 'default'" size="small" @click.stop="a.run()">{{ a.label }}</el-button>
             <el-dropdown v-if="actionsOf(row).length > 1" trigger="click" style="margin-left: 6px">

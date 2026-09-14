@@ -576,7 +576,7 @@ function actionsOf(c: any): { label: string; type?: string; run: () => void }[] 
         <el-table-column label="状态" width="104">
           <template #default="{ row }"><StatusTag dict="ChangeStatus" :value="row.status" /></template>
         </el-table-column>
-        <el-table-column label="操作" width="170" fixed="right">
+        <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
             <el-button
               v-for="(a, i) in actionsOf(row).slice(0, 1)"

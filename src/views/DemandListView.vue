@@ -347,7 +347,7 @@ function exportList() {
             <div class="cell-sub">{{ row.submittedAt ? fromNow(row.submittedAt) : '尚未提交' }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
             <el-button
               v-for="(a, i) in actionsOf(row).slice(0, 1)"

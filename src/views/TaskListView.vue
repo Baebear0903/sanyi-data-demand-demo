@@ -458,7 +458,7 @@ function sourceLabel(t: any): string {
           <el-table-column label="状态" width="104">
             <template #default="{ row }"><StatusTag dict="TaskStatus" :value="row.status" /></template>
           </el-table-column>
-          <el-table-column label="操作" width="160" fixed="right">
+          <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
               <el-button
                 v-for="(a, i) in actionsOf(row).slice(0, 1)"

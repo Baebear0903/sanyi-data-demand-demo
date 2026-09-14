@@ -306,7 +306,7 @@ function passRate(r: any): number {
             <div class="cell-sub">{{ row.approvedAt ? fmtTime(row.approvedAt).slice(5, 16) : '—' }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button
               v-for="(a, i) in actionsOf(row).slice(0, 1)" :key="i" link

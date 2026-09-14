@@ -539,6 +539,51 @@ img { max-width: 100%; display: block; }
 .dtree__path { display: flex; gap: 6px; flex-wrap: wrap; font-size: var(--fs-xs); color: var(--text-3); margin-bottom: var(--sp-3); }
 .dtree__result { padding: var(--sp-4); background: var(--success-bg); border-radius: var(--r-md); font-size: var(--fs-sm); color: #0f7a43; }
 
+/* ---------------- 表格单元格：统一单行，防止按钮/标签被挤到第二行 ----------------
+ *
+ * 背景：el-table 的 .cell 默认 white-space:normal，当列宽被压窄（窄视口、
+ * 字号放大、列变多）时，操作列里的「动作 + 更多」会被折成两行，行高随之跳动，
+ * 视觉上就是"按钮错位"。
+ *
+ * 策略：全站表格单元格强制单行，超出部分交给 overflow:hidden + text-overflow:ellipsis
+ * 处理（长文本列已标 show-overflow-tooltip）。这样行高恒定，操作列永远排成一行。
+ */
+.el-table .cell { white-space: nowrap; }
+
+/*
+ * 上面那条"交给 ellipsis"对**多行单元格**不成立：像
+ *   <div class="cell"><div class="cell-main">标题</div><div class="cell-sub">说明</div></div>
+ * 这种结构里，超长文字在子 div 内部，而 text-overflow 只作用于元素自身的行内内容，
+ * 子 div 是 overflow:visible 的块级盒 → 文字被父级 .cell 的 overflow:hidden 直接切掉，
+ * 现场看到的是"半个汉字"（实测全站 95 处：变更标题 / 关联需求单 / 影响·冲突 /
+ * 任务名称 / 发布标题 / 评价内容摘要 …，切在字中间且没有省略号）。
+ *
+ * 修复：让每个直接子 div 自己承担裁切，于是每一行各自拿到省略号。
+ * 展开行（.el-table__expanded-cell）里放的是整块面板，不参与单行化，排除在外。
+ */
+.el-table .el-table__cell:not(.el-table__expanded-cell) .cell > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 操作列内容按居中偏左排布，避免不同行按钮起点不齐 */
+.el-table .el-table__cell .cell > .el-button + .el-button,
+.el-table .el-table__cell .cell > .el-button + .el-dropdown { margin-left: 6px; }
+
+/* ---------------- 操作列：动作按钮与「更多」必须同一条水平线 ----------------
+ *
+ * 背景（用户报告的"操作列错位"，2026-09-14 复现）：.cell 是 block 容器，
+ * 里面并列着两个 inline-level 盒子——
+ *   · <el-button>  ：inline-flex + vertical-align:middle（Element Plus 默认）
+ *   · <el-dropdown>：inline-flex + vertical-align:top + line-height:1（EP 默认）
+ * 两者 vertical-align 不同，于是「更多」比左侧动作文字高 3.4px（实测 6 行全部如此），
+ * 看上去就是同一格里的两个按钮没对齐。
+ *
+ * 修复：表格单元格里的下拉触发体与按钮统一按 middle 对齐（实测偏差 3.4px → 0px）。
+ * 只作用于表格单元格，不动 el-dropdown 在其它场景的默认值。
+ */
+.el-table .el-table__cell .cell > .el-dropdown { vertical-align: middle; }
+
 /* 打印 */
 @media print {
   .app-side, .app-top, .page-head__actions { display: none !important; }
