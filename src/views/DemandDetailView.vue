@@ -83,6 +83,21 @@ function flowClass(i: number): string {
 }
 
 /* ------------------------------------------------------ 权限动作 -- */
+/**
+ * 验收 / 评价是否对当前角色可见
+ *
+ * 背景（本轮核验发现的死角）：原实现只判「申请人姓名 === 当前用户姓名」。但演示数据里大量单据的
+ * 申请人并不是演示用户（`XQ20260116002` 的申请人「吴强」、邮件单的「黄伟」、服务台代申报的
+ * 「王思远」…），这些单据一旦被推进到「待验收」，**任何角色都点不到「验收」**，
+ * 「已交付 / 已评价」两步永远不可达（与验收问题九同源的"状态机死角"）。
+ * 按角色职责矩阵，验收与评价本就是需求方（用数方）的职责，故补角色兜底。
+ */
+const canAcceptance = computed(() => {
+  const x = d.value
+  if (!x) return false
+  return x.applicant === store.user.name || ['consumer', 'admin'].includes(store.role.id)
+})
+
 function actionsOf(): { label: string; type?: string; run: () => void }[] {
   const x = d.value
   if (!x) return []
@@ -105,8 +120,8 @@ function actionsOf(): { label: string; type?: string; run: () => void }[] {
     && (can('demand.dispatch') || can('demand.deliver') || can('demand.accept') || can('admin.all'))) {
     out.push({ label: '标记实施完成', run: () => markImplementDone() })
   }
-  if (x.status === 'PENDING_ACCEPTANCE' && isApplicant) out.push({ label: '验收', type: 'primary', run: () => doAcceptance() })
-  if (['DELIVERED', 'EVALUATED'].includes(x.status) && isApplicant) out.push({ label: '评价', type: 'primary', run: () => router.push('/evaluation') })
+  if (x.status === 'PENDING_ACCEPTANCE' && canAcceptance.value) out.push({ label: '验收', type: 'primary', run: () => doAcceptance() })
+  if (['DELIVERED', 'EVALUATED'].includes(x.status) && canAcceptance.value) out.push({ label: '评价', type: 'primary', run: () => router.push('/evaluation') })
   if (['APPROVED', 'IMPLEMENTING', 'DELIVERED', 'CHANGING'].includes(x.status) && (can('demand.change') || can('admin.all'))) {
     out.push({ label: '变更', run: () => router.push('/change/list') })
   }
@@ -458,6 +473,15 @@ onMounted(() => {
             <div class="flow__time">{{ (flowTimes[s]?.() || '') ? fmtDate(flowTimes[s]()) : '' }}</div>
           </div>
         </div>
+        <el-alert
+          v-if="d.status === 'PENDING_ACCEPTANCE' && !canAcceptance"
+          class="mt-3"
+          type="info"
+          :closable="false"
+          show-icon
+          title="该单据已流转到「待验收」"
+          description="验收与评价由需求方（用数方）或平台管理员执行：可在顶栏账号区切换为「用数方」，再点右上角「验收」。"
+        />
         <el-alert
           v-if="['L3', 'L4'].includes(d.securityLevel)"
           class="mt-2"
