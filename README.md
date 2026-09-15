@@ -168,7 +168,7 @@ node .tooling/audit-run.mjs --script=<脚本名> [--pages=审计中心] [--sizes
 | --- | --- |
 | `audit-tables` / `audit-layout` / `audit-overflow` | 全站 29 页版式体检（表格 / 布局 / 溢出裁切） |
 | `e2e/cdp-smoke` | P0 状态流转 + P1 回归基线（最重要的自动化核验） |
-| `e2e/verify-gaps` | 验收要点可达性（G1–G10，16 条断言） |
+| `e2e/verify-gaps` | 验收要点可达性（G1–G11，21 条断言） |
 | `e2e/capture-proof` | 生成验收证据截图 → `验收问题回复/` |
 | `verify-audit-chain` | 留痕链路：自助服务改权限 → 审计中心可见 |
 | `verify-drawer` | 功能点覆盖表抽屉 + 「上次看到哪儿」缓存 |

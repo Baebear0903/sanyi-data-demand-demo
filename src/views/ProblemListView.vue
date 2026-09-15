@@ -793,12 +793,15 @@ function exportList() { ElMessage.success(`已导出 ${filtered.value.length} �
           </div>
         </div>
 
+        <div v-if="current.status === 'CLOSED'" class="text-xs muted mb-2">
+          该问题单已关闭（终态）：关闭 / 解决 / 转入已知错误流程已停用；如需继续跟进，可发送通知或提交知识条目。
+        </div>
         <div class="drawer-actions">
           <el-button @click="assign(current)">分派 / 重新分派</el-button>
           <el-button @click="escalate(current)">问题升级</el-button>
-          <el-button @click="openKnownError(current)">转入已知错误流程</el-button>
-          <el-button type="primary" @click="openSolve(current)">解决</el-button>
-          <el-button @click="openClose(current)">关闭</el-button>
+          <el-button :disabled="current.status === 'CLOSED'" @click="openKnownError(current)">转入已知错误流程</el-button>
+          <el-button type="primary" :disabled="current.status === 'CLOSED'" @click="openSolve(current)">解决</el-button>
+          <el-button :disabled="current.status === 'CLOSED'" @click="openClose(current)">关闭</el-button>
           <el-button type="success" plain @click="openKnowledge(current)">提交知识条目</el-button>
           <el-button @click="openNotify(current)">通知</el-button>
           <el-button link type="primary" @click="router.push(`/problem/detail/${current.id}`)">打开详情页 <el-icon><ArrowRight /></el-icon></el-button>

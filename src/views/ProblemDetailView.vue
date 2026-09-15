@@ -308,9 +308,9 @@ function submitRelease() {
         <el-button @click="router.push('/problem/list')"><el-icon><ArrowLeft /></el-icon> 返回列表</el-button>
         <el-button v-if="p && canManage" @click="assign">分派 / 重新分派</el-button>
         <el-button v-if="p && canManage" @click="escalate">问题升级</el-button>
-        <el-button v-if="p && canManage" @click="openKnownError">转入已知错误流程</el-button>
-        <el-button v-if="p && canManage" type="primary" @click="openSolve">解决</el-button>
-        <el-button v-if="p && canManage" @click="closeVisible = true">关闭</el-button>
+        <el-button v-if="p && canManage" :disabled="p.status === 'CLOSED'" @click="openKnownError">转入已知错误流程</el-button>
+        <el-button v-if="p && canManage" type="primary" :disabled="p.status === 'CLOSED'" @click="openSolve">解决</el-button>
+        <el-button v-if="p && canManage" :disabled="p.status === 'CLOSED'" @click="closeVisible = true">关闭</el-button>
         <el-button v-if="p && canManage" type="success" plain @click="openKnowledge">提交知识条目</el-button>
         <el-button v-if="p && canManage" type="warning" plain @click="openRelease">创建发布申请</el-button>
         <el-button v-if="p" @click="openNotify">发送通知</el-button>
@@ -349,6 +349,9 @@ function submitRelease() {
           </div>
           <div v-if="p.status === 'KNOWN_ERROR'" class="text-xs muted mt-2">
             该问题已找到根因但暂时无法根本解决，当前通过独立的「已知错误管理流程」管理：一线按临时解决方案处置，根治计划完成后回归正常解决流程。
+          </div>
+          <div v-if="p.status === 'CLOSED'" class="text-xs muted mt-2">
+            该问题单已关闭（终态）：关闭 / 解决 / 转入已知错误流程已停用；仍可提交知识条目、创建发布申请与发送通知。
           </div>
         </div>
       </div>
@@ -403,7 +406,7 @@ function submitRelease() {
           <div v-if="p.knownError" class="known-error mb-4">
             <div class="flex items-center justify-between mb-2">
               <span class="bold flex items-center gap-1"><el-icon><Share /></el-icon> 已知错误（独立管理流程）</span>
-              <el-button link type="primary" size="small" :disabled="!canManage" @click="openKnownError">更新临时方案 / 根治计划</el-button>
+              <el-button link type="primary" size="small" :disabled="!canManage || p.status === 'CLOSED'" @click="openKnownError">更新临时方案 / 根治计划</el-button>
             </div>
             <div class="desc-item"><span class="desc-item--label">临时解决方案</span><span class="desc-item__value">{{ p.knownError.workaround }}</span></div>
             <div class="desc-item mt-2"><span class="desc-item--label">根治计划</span><span class="desc-item__value">{{ p.knownError.permanentFixPlan }}</span></div>
@@ -415,7 +418,7 @@ function submitRelease() {
             <div class="card__head">
               <span class="card__title">解决方案与预防措施</span>
               <span class="card__spacer" />
-              <el-button size="small" type="primary" plain :disabled="!canManage" @click="openSolve">
+              <el-button size="small" type="primary" plain :disabled="!canManage || p.status === 'CLOSED'" @click="openSolve">
                 {{ p.solution ? '修订方案' : '填写方案' }}
               </el-button>
             </div>

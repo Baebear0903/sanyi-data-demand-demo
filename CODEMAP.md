@@ -29,7 +29,7 @@
 | 工作流管理 | `/workflow` | `WorkflowView.vue` | 工单审批规则与自动化部署（产物生成） | `cdp-smoke`、`verify-gaps` |
 | 交付与授权 | `/delivery` | `DeliveryView.vue` | 资源订阅与授权；**同时承载订阅单详情**ⓐ | `cdp-smoke` |
 | 事件管理 | `/incident/list` | `IncidentListView.vue` | 事件录入、派发、处理 | — |
-| 问题管理 | `/problem/list` | `ProblemListView.vue` | 问题根因分析、已知错误流程 | — |
+| 问题管理 | `/problem/list` | `ProblemListView.vue` | 问题根因分析、已知错误流程 | `verify-gaps` |
 | 发布管理 | `/release/list` | `ReleaseListView.vue` | 发布包管理、升级、回滚 | `cdp-smoke`、`verify-gaps` |
 | 知识库管理 | `/kb/list` | `KnowledgeListView.vue` | 知识条目增删改审；**同时承载知识条目详情**ⓐ | `cdp-smoke` |
 | 知识问答管理 | `/kb/qna` | `KnowledgeQnaView.vue` | 征询问答，可归档为知识 | `cdp-smoke`、`verify-gaps` |
@@ -121,7 +121,7 @@
 | `audit-layout.mjs` | 全站 29 页版式 |
 | `audit-overflow.mjs` | 横向溢出 / 硬裁切 / 头部错行 |
 | `e2e/cdp-smoke.mjs` | P0 状态流转 + P1（最重要的回归基线） |
-| `e2e/verify-gaps.mjs` | 12 条验收要点可达性 |
+| `e2e/verify-gaps.mjs` | 21 条验收要点可达性 |
 | `e2e/capture-proof.mjs` | 出验收证据截图 → `验收问题回复/` |
 | `e2e/probe-acceptance.mjs` | 定点核验"待验收 → 验收 / 评价"可达 |
 | `verify-audit-chain.mjs` | 留痕链路：自助服务改权限 → 审计中心可见 |
