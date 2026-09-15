@@ -13,7 +13,7 @@
  *  · 预定义需求类别（9.6）：提供预定义故障与服务申请类别、描述；根据所选服务类型展现不同界面、
  *    要求输入相关信息、激活不同处理流程。
  */
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDemoStore } from '@/stores/demo'
@@ -267,8 +267,28 @@ function toggleMatrix(roleId: string, itemId: string) {
     [itemId]: cur.includes(roleId) ? cur.filter(r => r !== roleId) : [...cur, roleId]
   }
 }
+/**
+ * 编辑态与「自助服务与类别配置」权限绑定：切换角色即退出编辑态并作废草稿。
+ * 进入编辑态只在点击时校验一次权限，若编辑态跨角色切换继续存在，
+ * 无该权限的角色就能沿用别人的编辑态继续勾选并保存（越权改权限矩阵）。
+ */
+watch(() => store.roleId, () => {
+  if (!editingMatrix.value) return
+  editingMatrix.value = false
+  draftRoles.value = {}
+  if (!canEditMatrix.value) {
+    ElMessage.warning(`已切换为「${store.role.name}」，该角色无「自助服务与类别配置」权限，编辑态已退出、未保存的调整已作废`)
+  }
+})
 /** 保存：把草稿写回服务目录项（allowedRoles），并写审计留痕 */
 function saveMatrix() {
+  // 落库前复核权限：编辑态可能是在具备权限的角色下进入的，而当前角色未必仍有权限
+  if (!canEditMatrix.value) {
+    editingMatrix.value = false
+    draftRoles.value = {}
+    ElMessage.warning(`当前角色「${store.role.name}」无「自助服务与类别配置」权限，无法保存权限配置（请切换为平台管理员）`)
+    return
+  }
   if (!matrixDirty.value) { ElMessage.info('权限配置没有变化'); editingMatrix.value = false; return }
   let changed = 0
   const detail: string[] = []

@@ -3,7 +3,7 @@
 > 三医数据底座 → 三医应用支撑 → 数据服务管理工具 → **数据需求管理**
 > 用于**产品功能验收**的纯前端静态演示系统。
 >
-> **状态：28 个业务页面已实现，62 个功能点全部可说明、可逐条验收；覆盖校验 / 类型检查 / 构建均通过。**
+> **状态：27 个业务页面（30 条路由）已实现，69 个功能点全部可说明、可逐条验收（其中 67 行有验收按钮）；覆盖校验 / 类型检查 / 构建均通过。**
 > 已完成 B 端后台化改版（顶部产品导航 / 单色线性图标 / 沉稳深蓝 / 验收内容移出业务页面）。
 
 ---
@@ -49,6 +49,7 @@ pnpm build:offline    # → offline/数据需求管理-演示系统.html（约 2
 | 未装 pnpm | `pnpm: command not found` | 用 `corepack pnpm <cmd>` |
 | corepack 缓存不可写 | `EPERM: mkdir '~/.cache/node/corepack'` | `export COREPACK_HOME=<开发仓库>/.tooling/corepack` |
 | npm 源慢 | install 卡住 | `npm_config_registry=https://registry.npmmirror.com` |
+| `node -e "…正则…"` 静默失效 | 反斜杠被 shell 先吃一层（如 `[\w-]` 变 `[w-]`） | 含正则/多行的片段**先落盘再跑**（`node /tmp/x.mjs`）；必须内联就用 heredoc `node <<'EOF'`（单引号不可省） |
 
 一行式：
 
@@ -110,10 +111,13 @@ demo/                              # ← 本目录就是 GitHub 仓库的根目�
 ├── vite.config.offline.ts    # 离线单文件构建
 ├── README.md                 # 本文件
 ├── PAGE-SPEC.md              # 页面开发规范（新增页面前必读）
+├── CODEMAP.md                # ★ 代码索引地图（改代码前先定位：页名 → 路由 → 文件）
+├── AGENTS.md                 # 项目级补充规范（E2E 例外清单 + 防卡死 SOP）
 ├── .github/workflows/        # GitHub Pages 自动部署（远端根 = 本目录，故工作流放这里）
 ├── scripts/
 │   ├── deploy-github.mjs     # ★ 发布脚本：只把 demo 内容推成远端仓库根
 │   ├── check-recipes.mjs     # 覆盖说明表静态校验（69 行完备性 / 原文一致性 / 示例编号）
+│   ├── check-codemap.mjs     # CODEMAP.md 与源码的结构对齐校验（视图 ↔ 路由 ↔ 地图行）
 │   ├── gen-feature-list.mjs  # 由本地功能清单生成 src/core/featureList.ts（依赖本地源文档）
 │   └── gen-recipes.mjs       # 由本地功能清单生成覆盖说明数据（依赖本地源文档）
 └── src/
@@ -134,6 +138,7 @@ demo/                              # ← 本目录就是 GitHub 仓库的根目�
     │   ├── featureList.ts    # 功能清单文本（由 gen-feature-list.mjs 生成）
     │   ├── recipes.ts        # 功能点覆盖说明：类型定义 + 数据再导出
     │   ├── recipesData.ts    # 69 行功能点的覆盖说明数据（角色 / 页面 / 要点 / 示例）
+    │   ├── recipesExtra.ts   # 补齐遗漏的 4 个功能点配方（2.7 变更审计、3.1–3.3 任务管理）
     │   └── recipeHelpers.ts  # 覆盖说明的展示辅助（菜单路径、角色名）
     ├── mock/seed.ts          # ★ 演示种子数据（2200 行，全部 Mock；示例编号的唯一真源）
     ├── stores/
@@ -141,12 +146,40 @@ demo/                              # ← 本目录就是 GitHub 仓库的根目�
     │   └── ui.ts             # 全局浮层状态（含「上次看到哪儿」缓存）
     ├── components/           # AppShell / ToolsDrawer / ArtifactPanel / ChangePlanEditor / ChartBox …
     ├── router/index.ts       # 路由表
-    └── views/                # 28 个业务页面
+    └── views/                # 27 个 .vue 文件，承载 30 条路由（4 个文件被列表页与详情页复用）
 ```
+
+> **找代码请先看 [`CODEMAP.md`](./CODEMAP.md)**：它按「中文页名 → 路由 → 视图文件」给出对照表，
+> 并标出被多条路由复用的视图（改详情页时容易改错文件）。新增/删除页面后必须同步更新，`pnpm verify` 会校验。
 
 ---
 
-## 五、功能点覆盖表（严格对齐《数据需求管理-功能清单》）
+## 五、浏览器核验命令索引
+
+核验脚本放在仓库根的 `.tooling/`，**已被 gitignore、不随本仓库发布**，因此只在本机可用。
+所有核验都必须经运行器（它负责起停 headless Chrome、健康检查、清理僵尸进程）：
+
+```bash
+cd demo && ./node_modules/.bin/vite preview --port 4173 --strictPort   # 终端 A：先起 preview
+node .tooling/audit-run.mjs --script=<脚本名> [--pages=审计中心] [--sizes=1920x1080] [--port=9334]
+```
+
+| 脚本 | 用途 |
+| --- | --- |
+| `audit-tables` / `audit-layout` / `audit-overflow` | 全站 29 页版式体检（表格 / 布局 / 溢出裁切） |
+| `e2e/cdp-smoke` | P0 状态流转 + P1 回归基线（最重要的自动化核验） |
+| `e2e/verify-gaps` | 验收要点可达性（G1–G10，16 条断言） |
+| `e2e/capture-proof` | 生成验收证据截图 → `验收问题回复/` |
+| `verify-audit-chain` | 留痕链路：自助服务改权限 → 审计中心可见 |
+| `verify-drawer` | 功能点覆盖表抽屉 + 「上次看到哪儿」缓存 |
+| `inspect-*` | 单页几何取证 + 截图（`change` / `clip` / `dropdown` / `expand` / `align`） |
+
+> **何时必须跑、怎么收窄页数、超时与僵尸进程怎么处理**，见 [`AGENTS.md`](./AGENTS.md)（E1–E7 例外清单与执行纪律）。
+> 单次前台调用建议不超过 2–3 个尺寸（实测约 120–180 秒/尺寸），更长的跑后台任务。
+
+---
+
+## 六、功能点覆盖表（严格对齐《数据需求管理-功能清单》）
 
 系统内置 **「功能点覆盖表」**（顶栏右上角 ⋯ → 功能点覆盖表），**与本地开发仓库的功能清单《数据需求管理-功能清单.md》逐行一一对应**（该清单是本地源文档，不随本仓库发布；其文本已固化为 `src/core/featureList.ts`）：
 
@@ -173,9 +206,13 @@ demo/                              # ← 本目录就是 GitHub 仓库的根目�
 ```bash
 cd demo
 pnpm check:recipes     # 清单完备性 69/69、原文一致性、67 个可验收行全部有原文依据、文案有据、示例编号有据
-pnpm verify            # 覆盖校验 + 类型检查
+pnpm check:codemap     # CODEMAP.md 与源码的结构对齐（视图文件 ↔ 路由 ↔ 地图行）
+pnpm verify            # 上面两项 + 类型检查（vue-tsc --noEmit 必须 0 错误）
 node scripts/gen-feature-list.mjs   # 改完《功能清单.md》后重新生成覆盖行真源
 ```
+
+> **约定**：改页面或 `core` / `stores` 后，`pnpm verify` 必须全绿；新增或删除页面、路由、脚本时，
+> 必须同步更新 [`CODEMAP.md`](./CODEMAP.md)，否则 `check:codemap` 会失败。
 
 表格支持**按层级筛选**（全部 / 仅模块 / 仅条目）、**按模块筛选**、「展开全部 / 收起全部」、搜索（含清单原文与演示要点）、「全部通过 / 清空」、导出 CSV（父行 + 子行一起导出，可直接交付第三方）。
 
@@ -235,7 +272,7 @@ node scripts/gen-feature-list.mjs   # 改完《功能清单.md》后重新生成
 
 ---
 
-## 六、演示数据（全部就绪）
+## 七、演示数据（全部就绪）
 
 | 类别 | 数量 |
 | --- | --- |
@@ -255,7 +292,7 @@ node scripts/gen-feature-list.mjs   # 改完《功能清单.md》后重新生成
 
 ---
 
-## 七、演示剧本（8 条）
+## 八、演示剧本（8 条）
 
 入口在「功能点覆盖表」抽屉的**表格最底部**（默认收起），展开后可选择剧本，逐步演示并**一键切换角色 + 跳转目标页面**：
 
@@ -270,7 +307,7 @@ node scripts/gen-feature-list.mjs   # 改完《功能清单.md》后重新生成
 
 ---
 
-## 八、演示角色与权限（6 个，顶栏可切换）
+## 九、演示角色与权限（6 个，顶栏可切换）
 
 | 角色 | 数据范围 | 典型权限 |
 | --- | --- | --- |
@@ -291,7 +328,7 @@ node scripts/gen-feature-list.mjs   # 改完《功能清单.md》后重新生成
 
 ---
 
-## 九、换肤说明
+## 十、换肤说明
 
 所有颜色、圆角、阴影、间距、字号集中在 **`src/styles/tokens.css`**，并同步覆盖 Element Plus 的 `--el-*` 变量。
 换肤或按新参考图对齐时**只需改这一个文件**，页面代码无需改动。
@@ -300,7 +337,7 @@ node scripts/gen-feature-list.mjs   # 改完《功能清单.md》后重新生成
 
 ---
 
-## 十、边界声明（验收时请留意）
+## 十一、边界声明（验收时请留意）
 
 1. **上游系统按"对接态"模拟**：资源目录、数据服务、数据分类分级、能力开放门户、CMDB 均为内置 Mock 数据，
    不实现其内部功能 —— 对应原文对大数据平台类能力标注的「本项目不计费用」。
