@@ -12,7 +12,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDemoStore, dictItem } from '@/stores/demo'
 import { config } from '@/core/config'
-import { NOW, addDays, arr, by, fmtTime, fromNow, iso } from '@/core/utils'
+import { NOW, addDays, arr, by, fmtTime, fromNow, iso, nowStamp } from '@/core/utils'
 import PageHead from '@/components/PageHead.vue'
 import StatCards from '@/components/StatCards.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -183,7 +183,7 @@ function resetForm() {
 }
 
 function nextNo(prefix: string, rows: any[]): string {
-  return `${prefix}202601${String(rows.length + 1).padStart(4, '0')}`
+  return `${prefix}${nowStamp().slice(0, 6)}${String(rows.length + 1).padStart(4, '0')}`
 }
 
 function submitCreate() {

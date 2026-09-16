@@ -16,7 +16,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useDemoStore } from '@/stores/demo'
 import { config } from '@/core/config'
-import { by, countBy, fmtShort } from '@/core/utils'
+import { by, countBy, fmtShort, NOW } from '@/core/utils'
 import PageHead from '@/components/PageHead.vue'
 import StatCards from '@/components/StatCards.vue'
 import type { StatItem } from '@/components/StatCards.vue'
@@ -28,8 +28,13 @@ const router = useRouter()
 const facts = config.facts
 
 /* ---------------------------------------------------------- 时间基准 -- */
-/** 与种子数据保持一致的基准时间，保证近 14 天趋势可复现 */
-const BASE = new Date('2026-01-27T10:30:00').getTime()
+/** 与种子数据保持一致的基准时间（唯一真源在 core/utils），保证趋势可复现 */
+const BASE = NOW.getTime()
+/**
+ * 趋势窗口天数：历史归档数据落在 8 月、未关闭记录与新增数据贴近真实当天，
+ * 因此窗口取 30 天才能同时覆盖两者（窗口太小会让趋势图几乎为空）。
+ */
+const TREND_DAYS = 30
 const DAY = 86400000
 const toTs = (v: unknown): number => (v ? new Date(String(v).replace(' ', 'T')).getTime() : NaN)
 
@@ -71,7 +76,7 @@ const BOARDS: Record<string, RoleBoard> = {
     summary: '汇总需求受理与交付、事件闭环与服务量的关键指标，突出待受理需求与未闭环事件，支撑统一受理与分派监督。',
     stats: ['pendingAccept', 'openIncident', 'escalatedIncident', 'incidentTotal', 'delivered', 'demandTotal'],
     trendTitle: '需求提交与交付趋势',
-    trendNote: '近 14 天 · 服务台受理口径',
+    trendNote: '近 30 天 · 服务台受理口径',
     trendTag: '来源：需求单流转记录',
     trendSource: 'demand',
     todosTitle: '我的待办 · 服务台受理',
@@ -92,7 +97,7 @@ const BOARDS: Record<string, RoleBoard> = {
     summary: '汇总需求审批、订阅授权与评价反馈的关键指标，突出待审批事项与已交付需求，支撑资源归属方审批决策。',
     stats: ['pendingApprove', 'pendingSubscription', 'pendingEvaluation', 'implementing', 'delivered', 'resourceCatalog'],
     trendTitle: '需求提交与交付趋势',
-    trendNote: '近 14 天 · 资源归属方审批口径',
+    trendNote: '近 30 天 · 资源归属方审批口径',
     trendTag: '来源：需求单流转记录',
     trendSource: 'demand',
     todosTitle: '我的待办 · 供数审批',
@@ -113,7 +118,7 @@ const BOARDS: Record<string, RoleBoard> = {
     summary: '汇总事件处理、问题推进与发布验证的关键指标，突出未闭环事件与待处置事项，支撑一线与二线协同。',
     stats: ['openIncident', 'escalatedIncident', 'openProblem', 'pendingRelease', 'pendingKnowledge', 'incidentTotal'],
     trendTitle: '事件新建与解决趋势',
-    trendNote: '近 14 天 · 运维处置口径',
+    trendNote: '近 30 天 · 运维处置口径',
     trendTag: '来源：事件单处理记录',
     trendSource: 'incident',
     todosTitle: '我的待办 · 运维处理',
@@ -134,7 +139,7 @@ const BOARDS: Record<string, RoleBoard> = {
     summary: '汇总生产任务承接、实施进度与交付产物的关键指标，突出实施中任务与待接单任务，支撑加工与建模排产。',
     stats: ['doingTask', 'pendingAcceptTask', 'pendingVerifyTask', 'doneTask', 'deployArtifact', 'taskTotal'],
     trendTitle: '任务派发与完成趋势',
-    trendNote: '近 14 天 · 生产实施口径',
+    trendNote: '近 30 天 · 生产实施口径',
     trendTag: '来源：任务单实施记录',
     trendSource: 'task',
     todosTitle: '我的待办 · 生产实施',
@@ -155,7 +160,7 @@ const BOARDS: Record<string, RoleBoard> = {
     summary: '汇总本账号提交需求的受理与交付进度，突出在途申请、待验收与待评价事项，方便随时掌握数据到手情况。',
     stats: ['mineInflight', 'mineAcceptance', 'mineDelivered', 'mineEvaluate', 'mineTotal', 'resourceCatalog'],
     trendTitle: '我的需求流转趋势',
-    trendNote: '近 14 天 · 本账号申请口径',
+    trendNote: '近 30 天 · 本账号申请口径',
     trendTag: '来源：我的需求单',
     trendSource: 'demand',
     todosTitle: '我的待办 · 用数申请',
@@ -176,7 +181,7 @@ const BOARDS: Record<string, RoleBoard> = {
     summary: '汇总需求、任务、事件、问题、发布与订阅授权的全量指标，用于平台整体运营概览与跨模块态势掌握。',
     stats: ['demandTotal', 'taskTotal', 'incidentTotal', 'problemTotal', 'releaseTotal', 'subscriptionTotal'],
     trendTitle: '需求提交与交付趋势',
-    trendNote: '近 14 天 · 全量数据',
+    trendNote: '近 30 天 · 全量数据',
     trendTag: '来源：需求单流转记录',
     trendSource: 'demand',
     todosTitle: null,
@@ -387,17 +392,17 @@ function trendOf(
   nameB: string
 ) {
   const categories: string[] = []
-  for (let i = 13; i >= 0; i--) {
+  for (let i = TREND_DAYS - 1; i >= 0; i--) {
     const d = new Date(BASE); d.setDate(d.getDate() - i)
     categories.push(`${d.getMonth() + 1}-${d.getDate()}`)
   }
-  const a = new Array(14).fill(0) as number[]
-  const b = new Array(14).fill(0) as number[]
+  const a = new Array(TREND_DAYS).fill(0) as number[]
+  const b = new Array(TREND_DAYS).fill(0) as number[]
   const put = (v: unknown, into: number[]) => {
     const ts = toTs(v)
     if (isNaN(ts)) return
-    const idx = 13 - Math.round((BASE - ts) / DAY)
-    if (idx >= 0 && idx < 14) into[idx] += 1
+    const idx = TREND_DAYS - 1 - Math.round((BASE - ts) / DAY)
+    if (idx >= 0 && idx < TREND_DAYS) into[idx] += 1
   }
   for (const r of rows) { put(getA(r), a); put(getB(r), b) }
   return { categories, series: [{ name: nameA, data: a }, { name: nameB, data: b }] }

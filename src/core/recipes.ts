@@ -39,7 +39,7 @@ export interface RecipeRow {
   ops: string[]
   /** 页面上看得见的证据（按钮 / 区块 / 页签名） */
   evidence?: string | null
-  /** 对应示例数据，如 “XQ20260112001 医保基金监管分析-门急诊费用与就诊明细申请” */
+  /** 对应示例数据，如 “XQ20260816001 医保基金监管分析-门急诊费用与就诊明细申请” */
   example?: string | null
 }
 

@@ -42,6 +42,7 @@ function requesterOf(i: any): string {
 function orgOfRequester(name: string): string {
   const u = (store.table('users') as any[]).find(x => x.name === name)
   if (u) return u.org
+  if (name === store.user.name) return store.user.org   // 登录账号不在演示人员名录内
   if (/服务台|邮箱/.test(name)) return '三医数据底座服务台'
   if (/系统|网关|用户/.test(name)) return '平台自动创建'
   return '其他来源'
@@ -146,7 +147,7 @@ const requesterRows = computed(() => {
   for (const i of scopedIncidents.value) {
     const actor = requesterOf(i)
     const u = users.find(x => x.name === actor)
-    const key = u ? u.name : '系统 / 其他渠道'
+    const key = (u || actor === store.user.name) ? actor : '系统 / 其他渠道'
     if (!map[key]) map[key] = { name: key, org: orgOfRequester(actor), total: 0, resolved: 0, series: new Array(7).fill(0) }
     const row = map[key]
     row.total += 1

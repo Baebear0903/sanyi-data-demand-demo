@@ -29,7 +29,7 @@ const dictOpts = (d: Record<string, { label: string }>) => Object.keys(d).map(k 
 const base = NOW
 const year = ref(base.getFullYear())
 const month = ref(base.getMonth() + 1)          // 1-12
-const TODAY = fmtDate(base)                      // 2026-01-27
+const TODAY = fmtDate(base)                      // 今天（core/utils 的 NOW = 真实当前时间）
 const selectedDate = ref(TODAY)
 
 function pad(n: number): string { return n < 10 ? '0' + n : String(n) }

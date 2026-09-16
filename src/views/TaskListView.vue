@@ -127,7 +127,7 @@ function onSourceChange(id: string) {
 }
 
 function nextTaskNo(): string {
-  // 单号日期取演示基准时间，避免出现"单号是 20260914、单据时间是 2026-01-27"的错位
+  // 单号日期取当前日期（nowStamp），避免出现"单号日期与单据时间不一致"的错位
   const day = nowStamp()
   return `RW${day}${String((store.table('tasks') as any[]).length + 1).padStart(3, '0')}`
 }

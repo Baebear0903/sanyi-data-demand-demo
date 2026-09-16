@@ -8,24 +8,79 @@
  *  · 全部数据由函数确定性生成，保证每次打开演示结果一致、可复现。
  */
 import { roles as ROLES } from '../core/roles.ts'
+import { NOW, SEED_ANCHOR } from '../core/utils.ts'
 
 const SECURITY_LEVEL_LABEL: Record<string, string> = {
   L1: 'L1 公开', L2: 'L2 内部', L3: 'L3 敏感', L4: 'L4 高敏感'
 }
 
-/* 基准时间：演示"当前时间"固定，保证数据一致 */
-const NOW = new Date('2026-01-27T10:30:00')
-/* 相对基准时间的偏移，输出 'YYYY-MM-DD HH:mm' */
+/*
+ * 种子数据使用两个时间锚点（与 core/utils 的双时钟对应）：
+ *  · 默认（LIVE=false）：历史归档记录，锚定固定基准日 SEED_ANCHOR，保证每次打开完全一致；
+ *  · LIVE=true：未关闭记录与"近 7 天小时桶"，锚定真实当前时间 NOW，
+ *    使创建时间落在最近几天、截止时间落在未来（SLA 剩余时间才合理）。
+ *    活跃记录的整条时间线一起平移，单号用 liveNo() 按真实日期重新编码。
+ */
+let LIVE = false
+/** 在活跃锚点下构造一条记录（记录内所有 D()/DD() 都改用真实当前时间） */
+function withLive<T>(build: () => T): T {
+  LIVE = true
+  try { return build() } finally { LIVE = false }
+}
+const pad2 = (n: number) => (n < 10 ? '0' + n : String(n))
+/** 历史锚点：基准日 + 偏移（整点覆盖时分）；活跃锚点：真实当前时间 + 同一偏移量 */
 function D(dayOffset: number, hour: number, minute: number): string {
-  const d = new Date(NOW.getTime());
-  d.setDate(d.getDate() + (dayOffset || 0));
-  d.setHours(hour === undefined ? 9 : hour, minute || 0, 0, 0);
-  const p = (n: number) => (n < 10 ? '0' + n : String(n))
-  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  const h = hour === undefined ? 9 : hour
+  const mi = minute || 0
+  let d: Date
+  if (LIVE) {
+    /* 保留"相对基准日 10:30 的时间差"，因此 SLA 剩余时长不随打开时刻漂移 */
+    const deltaMin = (dayOffset || 0) * 1440 + (h * 60 + mi) - (10 * 60 + 30)
+    d = new Date(NOW.getTime() + deltaMin * 60000)
+  } else {
+    d = new Date(SEED_ANCHOR.getTime())
+    d.setDate(d.getDate() + (dayOffset || 0))
+    d.setHours(h, mi, 0, 0)
+  }
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())
 }
 function DD(dayOffset: number): string { return D(dayOffset, 9, 0).slice(0, 10) }
+/** 活跃记录的纯日期（真实今天 + 偏移），用于计划起止 / 实施日期等只到日的字段 */
+function DDA(dayOffset: number): string {
+  const d = new Date(NOW.getTime())
+  d.setDate(d.getDate() + (dayOffset || 0))
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate())
+}
+/**
+ * 活跃记录的单号：保留前缀与流水，把日期段换成"真实今天 + 原偏移"。
+ * 偏移由原字面量的日期段与历史锚点反推，因此单号与记录日期的相对关系保持不变；
+ * 只到月精度的单号（ZS/WT/WD）取真实当前月。
+ */
+const LIVE_NO_OFFSET: Record<string, number> = {
+  XQ20260822005: -5, XQ20260828006: -2, XQ20260829007: -1,
+  DY20260818001: -9, DY20260826002: -2, DY20260821003: -6, DY20260824006: -3, DY20260825009: -4,
+  NL20260831003: -1, SJ20260830004: 0, PJ20260819002: -2
+}
+function liveNo(template: string): string {
+  const m = /^([A-Z]+)(\d{8}|\d{6})(\d{3,4})$/.exec(template)
+  if (!m) return template
+  const [, prefix, stamp, seqNo] = m
+  let dayOffset = 0
+  if (stamp.length === 8) {
+    const t = new Date(`${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T09:00:00`).getTime()
+    dayOffset = Math.round((t - SEED_ANCHOR.getTime()) / 86400000)
+  }
+  if (template in LIVE_NO_OFFSET) dayOffset = LIVE_NO_OFFSET[template]
+  const live = new Date(NOW.getTime())
+  live.setDate(live.getDate() + dayOffset)
+  const ymd = `${live.getFullYear()}${pad2(live.getMonth() + 1)}${pad2(live.getDate())}`
+  return prefix + (stamp.length === 8 ? ymd : ymd.slice(0, 6)) + seqNo
+}
 function pick<T>(arr: T[], i: number): T { return arr[((i % arr.length) + arr.length) % arr.length]; }
-function seq(prefix: string, n: number, day: number): string { return prefix + '202601' + (day < 10 ? '0' + day : day) + String(n).padStart(3, '0'); }
+/** 单号：前缀 + 历史基准年月 + 日 + 流水（历史归档记录用） */
+function seq(prefix: string, n: number, day: number): string {
+  return prefix + SEED_ANCHOR.getFullYear() + pad2(SEED_ANCHOR.getMonth() + 1) + pad2(day) + String(n).padStart(3, '0')
+}
 
 /* ======================================================== 组织与人员 -- */
 const ORGS = [
@@ -407,8 +462,8 @@ const SAMPLES = {
     { staff_id: 'STF000018625', staff_name: '刘**', id_card: '1101**********5678', org_code: 'BJ-H-0001', dept_name: '呼吸内科', title: '副主任医师', practice_no: '1101******2019', mobile: '139****8834' }
   ],
   r003: [
-    { visit_no: 'OP202601200001', patient_id: 'PT******4821', id_card: '1101**********4821', visit_date: '2026-01-20', dept_name: '心血管内科', diagnosis_code: 'I10', diagnosis_name: '原发性高血压', fee_total: '386.50', insurance_type: '城镇职工医保' },
-    { visit_no: 'OP202601200002', patient_id: 'PT******7735', id_card: '1101**********7735', visit_date: '2026-01-20', dept_name: '内分泌科', diagnosis_code: 'E11', diagnosis_name: '2型糖尿病', fee_total: '542.80', insurance_type: '城乡居民医保' }
+    { visit_no: 'OP202608240001', patient_id: 'PT******4821', id_card: '1101**********4821', visit_date: '2026-08-24', dept_name: '心血管内科', diagnosis_code: 'I10', diagnosis_name: '原发性高血压', fee_total: '386.50', insurance_type: '城镇职工医保' },
+    { visit_no: 'OP202608240002', patient_id: 'PT******7735', id_card: '1101**********7735', visit_date: '2026-08-24', dept_name: '内分泌科', diagnosis_code: 'E11', diagnosis_name: '2型糖尿病', fee_total: '542.80', insurance_type: '城乡居民医保' }
   ],
   r005: [
     { drug_code: 'DRG0001842', drug_name: '阿莫西林胶囊', trade_name: '阿莫仙', dosage_form: '胶囊剂', spec: '0.25g*24粒', manufacturer: '***制药有限公司', approval_no: '国药准字H****1234' }
@@ -417,7 +472,7 @@ const SAMPLES = {
     { insured_id: 'MI******9012', name: '陈**', id_card: '1101**********9012', gender: '男', birth_date: '1972-**-**', insured_type: '城镇职工医保', employer: '***有限公司', bank_account: '6222 **** **** 4821' }
   ],
   r007: [
-    { settle_no: 'ST202601200001', insured_id: 'MI******9012', settle_date: '2026-01-20', org_code: 'BJ-H-0001', total_fee: '1,286.40', fund_pay: '964.80', self_pay: '321.60', settle_type: '普通门诊' }
+    { settle_no: 'ST202608240001', insured_id: 'MI******9012', settle_date: '2026-08-24', org_code: 'BJ-H-0001', total_fee: '1,286.40', fund_pay: '964.80', self_pay: '321.60', settle_type: '普通门诊' }
   ],
   r011: [
     { org_code: 'BJ-H-0001', district: '西城区', org_name: '北京***医院', bed_count: 1820 }
@@ -567,11 +622,23 @@ const DEMAND_TEMPLATES = [
 ];
 
 /* ============================================== 预定义需求类别（自助服务）-- */
+/** 服务产品示意图：内联 SVG（不引入二进制资源），用于服务产品的图文展示 */
+const svcFigure = (text: string): string => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="560" height="104">'
+  + '<rect x="1" y="1" width="558" height="102" rx="6" fill="#eef3f9" stroke="#b9cde4"/>'
+  + '<text x="280" y="58" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#1f4e8c">' + text + '</text></svg>'
+)
+
 const CATALOG_ITEMS = [
   {
     id: 'sc01', name: '数据资源申请', category: '数据服务', icon: 'DataAnalysis', banner: '',
     desc: '申请使用资源目录中已上架的数据资源（库表 / 接口 / 文件）',
     availability: '99.9%', serviceTime: '7×24 小时', flowId: 'wf01',
+    introHtml: '<h3>服务说明</h3><p>面向三医部门提供已上架数据资源的申请入口，覆盖库表、接口、文件三种交付方式；审批通过后可在「交付与授权」中完成订阅、渠道授权与密钥获取。</p>'
+      + '<h3>办理流程</h3><p><img src="' + svcFigure('提交申请 → 服务台受理 → 资源归属方审批 → 授权交付') + '" alt="办理流程示意" /></p>'
+      + '<h3>可申请范围</h3><ul><li>医疗卫生机构、医疗卫生人员、药品、医保结算等主题库资源；</li>'
+      + '<li>敏感级别 L3 及以上的资源，审批链自动增加安全合规审批节点。</li></ul>'
+      + '<h3>办理时限</h3><p>服务台 4 小时内受理，资源归属方 1 个工作日内完成审批，生产实施方 3 个工作日内完成交付。</p>',
     allowedRoles: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin'],
     formSchema: [
       { key: 'resource', label: '目标资源', type: 'search', required: true },
@@ -584,6 +651,10 @@ const CATALOG_ITEMS = [
     id: 'sc02', name: '新增数据需求', category: '数据服务', icon: 'CirclePlus', banner: 'alt',
     desc: '现有资源无法满足时，提出新增数据采集 / 加工 / 建模需求',
     availability: '99.5%', serviceTime: '工作日 09:00-18:00', flowId: 'wf01',
+    introHtml: '<h3>服务说明</h3><p>现有主题库无法覆盖的数据需求，可在此提出新增采集、加工或建模需求，平台按需求单派发生产任务并分批交付。</p>'
+      + '<h3>办理流程</h3><p><img src="' + svcFigure('提交需求 → 资源归属方审批 → 派发生产任务 → 分批交付') + '" alt="办理流程示意" /></p>'
+      + '<h3>需要准备</h3><ul><li>所需数据项清单与业务口径；</li><li>建议的数据来源单位；</li><li>期望交付时间与使用期限。</li></ul>'
+      + '<h3>办理时限</h3><p>服务台 4 小时内受理；资源归属方审批通过后派发生产任务，交付时间以任务计划为准。</p>',
     allowedRoles: ['consumer', 'supplier', 'desk', 'admin'],
     formSchema: [
       { key: 'dataDesc', label: '所需数据描述', type: 'textarea', required: true },
@@ -595,6 +666,10 @@ const CATALOG_ITEMS = [
     id: 'sc03', name: '数据服务订阅', category: '数据服务', icon: 'Connection', banner: 'purple',
     desc: '订阅已发布的 API 服务 / 文件服务 / 实时服务（需填写需求工单号）',
     availability: '99.9%', serviceTime: '7×24 小时', flowId: 'wf03',
+    introHtml: '<h3>服务说明</h3><p>订阅平台上已发布的 API 服务、文件服务与实时服务，订阅时需填写已审批通过的需求工单号，系统会校验工单与申请资源的一致性。</p>'
+      + '<h3>办理流程</h3><p><img src="' + svcFigure('提交订阅 → 资源归属方审批 → 渠道授权 → 密钥发放与推送') + '" alt="办理流程示意" /></p>'
+      + '<h3>订阅方式</h3><ol><li>API 服务：获取接口地址与调用凭据；</li><li>文件服务：按约定时间从 SFTP 通道获取文件；</li><li>实时服务：订购后自动组装并推送。</li></ol>'
+      + '<h3>注意事项</h3><p>敏感资源采用 SFTP 通道下发；密钥为敏感凭据，请勿共享或写入客户端代码。</p>',
     allowedRoles: ['consumer', 'supplier', 'desk', 'admin'],
     formSchema: [
       { key: 'demandNo', label: '需求工单号', type: 'text', required: true },
@@ -607,6 +682,9 @@ const CATALOG_ITEMS = [
     id: 'sc04', name: '数据质量问题反馈', category: '故障申诉', icon: 'Warning', banner: 'warm',
     desc: '反馈数据缺失、口径错误、更新延迟等数据质量问题',
     availability: '99.5%', serviceTime: '7×24 小时', flowId: 'wf06',
+    introHtml: '<h3>服务说明</h3><p>反馈数据缺失、口径不一致、更新延迟、数据错误等数据质量问题；提交后按事件分类规则自动分派至对应处理组，并与相关事件、问题单关联。</p>'
+      + '<h3>请提供</h3><ul><li>涉及的资源或服务名称；</li><li>问题现象与发现时间；</li><li>期望结果（有对照数据请一并说明）。</li></ul>'
+      + '<h3>处理时限</h3><p>P1 事件 8 小时内响应、P2 事件 24 小时内响应；数据延迟类问题 4 小时内给出初步结论。</p>',
     allowedRoles: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin'],
     formSchema: [
       { key: 'resource', label: '涉及资源', type: 'search', required: true },
@@ -618,6 +696,9 @@ const CATALOG_ITEMS = [
     id: 'sc05', name: '系统故障报修', category: '故障申诉', icon: 'Tools',
     desc: '平台功能不可用、接口报错、性能异常等故障申报',
     availability: '99.9%', serviceTime: '7×24 小时', flowId: 'wf06',
+    introHtml: '<h3>服务说明</h3><p>平台功能不可用、接口报错、性能异常等故障申报入口；提交后按严重等级与影响程度自动计算优先级并分派处理人。</p>'
+      + '<h3>请提供</h3><ul><li>故障系统 / 功能模块；</li><li>报错信息与操作步骤；</li><li>影响范围（是否影响业务办理）。</li></ul>'
+      + '<h3>处理时限</h3><p>P0 事件 4 小时内响应并升级至二线支持组，P1 事件 8 小时内响应，处理进展通过事件时间轴同步。</p>',
     allowedRoles: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin'],
     formSchema: [
       { key: 'system', label: '故障系统/功能', type: 'text', required: true },
@@ -629,6 +710,9 @@ const CATALOG_ITEMS = [
     id: 'sc06', name: '权限与账号申请', category: '权限服务', icon: 'Key', banner: 'alt',
     desc: '申请平台账号、角色权限、密钥补发等',
     availability: '99.5%', serviceTime: '工作日 09:00-18:00', flowId: 'wf03',
+    introHtml: '<h3>服务说明</h3><p>申请平台账号、角色权限调整、密钥补发与租户注册，提交后由平台运营中心审核并配置。</p>'
+      + '<h3>办理流程</h3><ol><li>提交申请（申请类型 + 目标人员 + 申请理由）；</li><li>平台运营中心审核；</li><li>配置权限或发放密钥并通知申请人。</li></ol>'
+      + '<h3>注意事项</h3><p>密钥仅向申请人本人发放；人员岗位调整或离职时，请及时提交权限回收申请。</p>',
     allowedRoles: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin'],
     formSchema: [
       { key: 'accountType', label: '申请类型', type: 'select', required: true, options: ['新建账号', '权限调整', '密钥补发', '租户注册'] },
@@ -707,7 +791,7 @@ const KB_CATEGORIES = [
 
 const KNOWLEDGES = [
   {
-    id: 'k01', no: 'ZS2026010001', title: 'API 服务鉴权失败（401/403）排查清单', categoryId: 'kc011', categoryName: '数据需求管理',
+    id: 'k01', no: 'ZS2026080001', title: 'API 服务鉴权失败（401/403）排查清单', categoryId: 'kc011', categoryName: '数据需求管理',
     owner: '陈志刚', status: 'PUBLISHED', createdAt: D(-180, 9, 0), publishedAt: D(-178, 10, 0), refCount: 86,
     contentText: '鉴权失败 密钥过期 渠道授权 IP白名单 appKey appSecret 401 403 排查',
     contentHtml: '<h3>适用场景</h3><p>数据服务订阅方调用 API 服务时返回 <code>401 Unauthorized</code> 或 <code>403 Forbidden</code>。</p>' +
@@ -722,7 +806,7 @@ const KNOWLEDGES = [
     relatedIds: ['k04']
   },
   {
-    id: 'k02', no: 'ZS2026010002', title: '数据更新延迟（T+1 未到数）处理规范', categoryId: 'kc022', categoryName: '数据加工与调度',
+    id: 'k02', no: 'ZS2026080002', title: '数据更新延迟（T+1 未到数）处理规范', categoryId: 'kc022', categoryName: '数据加工与调度',
     owner: '刘涛', status: 'PUBLISHED', createdAt: D(-165, 10, 0), publishedAt: D(-163, 9, 0), refCount: 124,
     contentText: '数据延迟 未更新 调度 作业 T+1 补数 稽核',
     contentHtml: '<h3>现象</h3><p>订阅方反馈 T+1 数据未按时更新，或文件服务下发的文件日期滞后。</p>' +
@@ -738,7 +822,7 @@ const KNOWLEDGES = [
     relatedIds: []
   },
   {
-    id: 'k03', no: 'ZS2026010003', title: '数据需求申请填写指引（含字段说明）', categoryId: 'kc011', categoryName: '数据需求管理',
+    id: 'k03', no: 'ZS2026080003', title: '数据需求申请填写指引（含字段说明）', categoryId: 'kc011', categoryName: '数据需求管理',
     owner: '王思远', status: 'PUBLISHED', createdAt: D(-150, 11, 0), publishedAt: D(-148, 14, 0), refCount: 208,
     contentText: '需求申请 填写指引 字段说明 用途 使用期限 交付方式 模板',
     contentHtml: '<h3>申请前准备</h3><ul><li>明确业务场景与用途，用途描述将作为审批的重要依据。</li>' +
@@ -753,7 +837,7 @@ const KNOWLEDGES = [
     comments: [], relatedIds: ['k01']
   },
   {
-    id: 'k04', no: 'ZS2026010004', title: '服务渠道授权与密钥管理操作手册', categoryId: 'kc012', categoryName: '资源目录与订阅',
+    id: 'k04', no: 'ZS2026080004', title: '服务渠道授权与密钥管理操作手册', categoryId: 'kc012', categoryName: '资源目录与订阅',
     owner: '赵敏', status: 'PUBLISHED', createdAt: D(-140, 9, 0), publishedAt: D(-138, 16, 0), refCount: 64,
     contentText: '渠道授权 密钥 补发 更换 使用范围 可见范围 应用绑定',
     contentHtml: '<h3>渠道授权配置</h3><p>在「服务渠道授权管理」中基于服务发布渠道配置使用范围与可见范围：使用范围决定哪些用户或组织可以使用该服务；可见范围决定哪些用户能在系统中看到该服务。</p>' +
@@ -764,7 +848,7 @@ const KNOWLEDGES = [
     attachments: [], ratings: [{ user: '张建国', score: 4, at: D(-90, 11, 0) }], comments: [], relatedIds: ['k01']
   },
   {
-    id: 'k05', no: 'ZS2026010005', title: '敏感数据脱敏规则与 SM4 加密说明', categoryId: 'kc032', categoryName: '脱敏与授权',
+    id: 'k05', no: 'ZS2026080005', title: '敏感数据脱敏规则与 SM4 加密说明', categoryId: 'kc032', categoryName: '脱敏与授权',
     owner: '周雅静', status: 'PUBLISHED', createdAt: D(-130, 14, 0), publishedAt: D(-128, 9, 0), refCount: 47,
     contentText: '脱敏 SM3 SM4 加密 掩码 截断 分级 L3 L4 安全级别 算法',
     contentHtml: '<h3>脱敏算法</h3><p>平台提供不少于 5 个安全级别、20 种以上脱敏算法，涵盖加密、掩码、哈希、截断等方式，其中必须支持国产 SM3 与 SM4 算法，并支持算法参数配置与效果测试。</p>' +
@@ -774,7 +858,7 @@ const KNOWLEDGES = [
     ratings: [{ user: '陈志刚', score: 5, at: D(-70, 10, 0) }], comments: [], relatedIds: []
   },
   {
-    id: 'k06', no: 'ZS2026010006', title: '数据沙箱使用规范（原始明细不出沙箱）', categoryId: 'kc031', categoryName: '数据分类分级',
+    id: 'k06', no: 'ZS2026080006', title: '数据沙箱使用规范（原始明细不出沙箱）', categoryId: 'kc031', categoryName: '数据分类分级',
     owner: '周雅静', status: 'PUBLISHED', createdAt: D(-120, 10, 0), publishedAt: D(-118, 15, 0), refCount: 33,
     contentText: '沙箱 可用不可见 训练沙箱 准生产沙箱 高敏感 原始明细 不出门',
     contentHtml: '<h3>适用范围</h3><p>高敏感数据的开发利用必须使用训练沙箱构建模型、数据沙箱生产运行、生产沙箱结果数据整合输出，原始明细数据不出数据沙箱。</p>' +
@@ -783,7 +867,7 @@ const KNOWLEDGES = [
     attachments: [], ratings: [{ user: '郑晓', score: 4, at: D(-45, 14, 0) }], comments: [], relatedIds: ['k05']
   },
   {
-    id: 'k07', no: 'ZS2026010007', title: '平台无法登录排查指引', categoryId: 'kc011', categoryName: '数据需求管理',
+    id: 'k07', no: 'ZS2026080007', title: '平台无法登录排查指引', categoryId: 'kc011', categoryName: '数据需求管理',
     owner: '徐鹏', status: 'PUBLISHED', createdAt: D(-110, 9, 0), publishedAt: D(-108, 11, 0), refCount: 152,
     contentText: '无法登录 白屏 账号 权限 密码 浏览器 缓存 统一认证',
     contentHtml: '<h3>排查顺序</h3><ol><li>确认网络与域名可访问，排除本地网络问题。</li>' +
@@ -798,7 +882,7 @@ const KNOWLEDGES = [
     relatedIds: []
   },
   {
-    id: 'k08', no: 'ZS2026010008', title: '数据缺失与口径不一致处理规范', categoryId: 'kc022', categoryName: '数据加工与调度',
+    id: 'k08', no: 'ZS2026080008', title: '数据缺失与口径不一致处理规范', categoryId: 'kc022', categoryName: '数据加工与调度',
     owner: '何静', status: 'PUBLISHED', createdAt: D(-100, 15, 0), publishedAt: D(-98, 10, 0), refCount: 71,
     contentText: '数据缺失 口径不一致 稽核 对账 指标 统计口径',
     contentHtml: '<h3>两类问题的区分</h3><p><b>数据缺失</b>：应为有值却为空，通常源于采集失败、字段映射错误或过滤条件不当。</p>' +
@@ -809,17 +893,17 @@ const KNOWLEDGES = [
       '<li>确属数据错误且无法即时修复的，转入问题单做根因分析并给出临时解决方案。</li></ol>',
     attachments: [], ratings: [{ user: '吴强', score: 4, at: D(-40, 11, 0) }], comments: [], relatedIds: ['k02']
   },
-  {
-    id: 'k09', no: 'ZS2026010009', title: '需求变更的风险评估与冲突分析要点', categoryId: 'kc011', categoryName: '数据需求管理',
+  withLive(() => ({
+    id: 'k09', no: liveNo('ZS2026080009'), title: '需求变更的风险评估与冲突分析要点', categoryId: 'kc011', categoryName: '数据需求管理',
     owner: '孙立', status: 'PENDING_REVIEW', createdAt: D(-12, 10, 0), refCount: 0,
     contentText: '需求变更 风险评估 冲突分析 影响模拟 CMDB 配置项 服务调用',
     contentHtml: '<h3>风险评估（基于 CMDB 影响模拟）</h3><p>输入变更对象后，系统基于配置管理数据库的数据模型进行影响模拟分析，输出受影响的配置项、服务、订阅方与影响等级。</p>' +
       '<h3>冲突分析</h3><p>基于配置项与服务调用情况进行变更冲突分析，主要识别三类冲突：时间窗冲突（同一窗口内的多个变更）、资源冲突（同一配置项被多个变更占用）、服务依赖冲突（变更影响链上存在其他在途变更）。</p>' +
       '<h3>可视化变更窗口</h3><p>制定变更计划时应参考可视化变更窗口，窗口中同时展示当前已有变更与业务事件日程，避免与业务高峰冲突。</p>',
     attachments: [], ratings: [], comments: [], relatedIds: []
-  },
+  })),
   {
-    id: 'k10', no: 'ZS2026010010', title: '资源目录检索技巧（业务导航 + 全文检索）', categoryId: 'kc012', categoryName: '资源目录与订阅',
+    id: 'k10', no: 'ZS2026080010', title: '资源目录检索技巧（业务导航 + 全文检索）', categoryId: 'kc012', categoryName: '资源目录与订阅',
     owner: '张建国', status: 'PUBLISHED', createdAt: D(-90, 9, 0), publishedAt: D(-88, 14, 0), refCount: 96,
     contentText: '资源目录 检索 业务导航 精确检索 模糊检索 筛选 主题域 模型层',
     contentHtml: '<h3>检索方式</h3><ul><li><b>业务导航检索</b>：按三医业务类重要指标导航统计，如资源类型、来源分类、数据分类，支持目录树结构化导航。</li>' +
@@ -829,7 +913,7 @@ const KNOWLEDGES = [
     attachments: [], ratings: [{ user: '黄伟', score: 5, at: D(-35, 9, 0) }], comments: [], relatedIds: ['k03']
   },
   {
-    id: 'k11', no: 'ZS2026010011', title: '事件分级标准与优先级矩阵', categoryId: 'kc011', categoryName: '数据需求管理',
+    id: 'k11', no: 'ZS2026080011', title: '事件分级标准与优先级矩阵', categoryId: 'kc011', categoryName: '数据需求管理',
     owner: '王思远', status: 'PUBLISHED', createdAt: D(-80, 11, 0), publishedAt: D(-78, 9, 0), refCount: 58,
     contentText: '事件分级 严重等级 影响程度 紧急程度 优先级矩阵 响应时限',
     contentHtml: '<h3>三个分类维度</h3><p>事件按<b>严重等级</b>（严重 / 高 / 中 / 低）、<b>影响程度</b>（严重影响业务 / 部分功能受影响 / 轻微影响）、<b>紧急程度</b>（紧急 / 较急 / 一般）三个维度分类，并据此计算优先级。</p>' +
@@ -839,7 +923,7 @@ const KNOWLEDGES = [
     attachments: [], ratings: [{ user: '陈志刚', score: 4, at: D(-30, 10, 0) }], comments: [], relatedIds: ['k07']
   },
   {
-    id: 'k12', no: 'ZS2026010012', title: '租户注册与企业资质审核要点', categoryId: 'kc013', categoryName: '能力开放门户',
+    id: 'k12', no: 'ZS2026080012', title: '租户注册与企业资质审核要点', categoryId: 'kc013', categoryName: '能力开放门户',
     owner: '赵敏', status: 'PUBLISHED', createdAt: D(-70, 14, 0), publishedAt: D(-68, 10, 0), refCount: 29,
     contentText: '租户注册 个人 企业 资质 营业编码 审核 不通过 重新提交',
     contentHtml: '<h3>个人账号注册</h3><p>需填写姓名、手机号、身份证、邮箱、用户名、密码等信息后提交。</p>' +
@@ -848,7 +932,7 @@ const KNOWLEDGES = [
     attachments: [], ratings: [], comments: [], relatedIds: []
   },
   {
-    id: 'k13', no: 'ZS2026010013', title: '三医主数据标准与贯标要求', categoryId: 'kc021', categoryName: '数据采集与接入',
+    id: 'k13', no: 'ZS2026080013', title: '三医主数据标准与贯标要求', categoryId: 'kc021', categoryName: '数据采集与接入',
     owner: '张建国', status: 'PUBLISHED', createdAt: D(-60, 9, 0), publishedAt: D(-58, 15, 0), refCount: 42,
     contentText: '主数据 标准 贯标 唯一 准确 一致 编码 字典',
     contentHtml: '<h3>主数据范围</h3><p>将三医部门中跨部门、跨层级、跨系统、跨业务的数据共享和业务协同过程中共性、共享、共用的关键性、持久性的业务实体核心数据定义为三医主数据。</p>' +
@@ -857,7 +941,7 @@ const KNOWLEDGES = [
     attachments: [], ratings: [{ user: '何静', score: 5, at: D(-25, 14, 0) }], comments: [], relatedIds: ['k08']
   },
   {
-    id: 'k14', no: 'ZS2026010014', title: '发布包归档与版本回滚操作指引', categoryId: 'kc011', categoryName: '数据需求管理',
+    id: 'k14', no: 'ZS2026080014', title: '发布包归档与版本回滚操作指引', categoryId: 'kc011', categoryName: '数据需求管理',
     owner: '赵敏', status: 'PUBLISHED', createdAt: D(-50, 10, 0), publishedAt: D(-48, 11, 0), refCount: 37,
     contentText: '发布 归档 回滚 版本 撤回 业务验证 停机时间 发布审计',
     contentHtml: '<h3>发布包归档</h3><p>每次发布的安装都进行归档，可随时回滚到上一个版本。归档信息包括版本号、归档时间、操作人与备注。</p>' +
@@ -865,13 +949,83 @@ const KNOWLEDGES = [
       '<h3>业务验证</h3><p>按批复的发布申请要求，在规定时间点升级，并逐项完成业务验证；验证不通过应触发回滚评估。</p>' +
       '<h3>发布审计</h3><p>对发布项进行事后审计，确保每次升级闭环。</p>',
     attachments: [], ratings: [], comments: [], relatedIds: []
-  }
+  },
+  {
+    id: 'k15', no: 'ZS2026080015', title: '医保基金监管分析取数与口径核对指引', categoryId: 'kc041', categoryName: '市医保局',
+    owner: '李慧敏', status: 'PUBLISHED', createdAt: D(-96, 9, 0), publishedAt: D(-94, 10, 0), refCount: 58,
+    contentText: '基金监管 门诊费用 结算明细 口径 核对 取数 违规线索',
+    contentHtml: '<h3>适用场景</h3><p>医保基金监管分析平台开展门诊费用异常筛查、分解处方与超量开药线索分析时的取数与口径核对。</p>' +
+      '<h3>取数路径</h3><ul><li>就诊明细：门急诊就诊明细查询服务（按就诊日期范围取数）；</li>' +
+      '<li>结算信息：医保结算信息查询服务（按结算日期范围取数，敏感字段按分级规则脱敏）；</li>' +
+      '<li>机构信息：医疗机构信息查询服务（按机构代码关联）。</li></ul>' +
+      '<h3>口径核对</h3><p>费用类指标以结算信息为准，就诊人次以就诊明细为准；两者差异超过 0.5% 时需核对退费与作废单据。</p>' +
+      '<h3>注意事项</h3><p>监管分析结果仅用于本部门业务监测，不得向第三方转供；导出结果需保留水印与操作留痕。</p>',
+    attachments: [{ name: '基金监管取数口径对照表.xlsx', type: 'xlsx', size: '236 KB', contentText: '基金监管 取数口径 费用 人次 退费 作废 差异容忍度' }],
+    ratings: [{ user: '郑晓', score: 5, at: D(-80, 14, 0) }],
+    comments: [{ user: '郑晓', content: '口径对照表很实用，退费单据的处理方式写得很清楚。', at: D(-80, 14, 0), ownerNotified: true }],
+    relatedIds: ['k01']
+  },
+  {
+    id: 'k16', no: 'ZS2026080016', title: '药品追溯数据订阅与字段说明', categoryId: 'kc042', categoryName: '市药监局',
+    owner: '刘涛', status: 'PUBLISHED', createdAt: D(-88, 10, 0), publishedAt: D(-86, 9, 0), refCount: 41,
+    contentText: '药品 追溯 订阅 字段 批准文号 生产企业 批次 文件服务',
+    contentHtml: '<h3>订阅方式</h3><p>药品追溯数据通过「数据服务订阅」申请，需填写已审批通过的需求工单号，审批通过后按约定的下发时间从文件服务获取。</p>' +
+      '<h3>字段说明</h3><ul><li><code>drug_code</code>：药品本位码，与三医主数据标准一致；</li>' +
+      '<li><code>approval_no</code>：批准文号；</li><li><code>batch_no</code>：生产批次；</li>' +
+      '<li><code>manufacturer</code>：生产企业名称（按主数据标准名称返回）。</li></ul>' +
+      '<h3>常见问题</h3><p>若下发文件为空，请先确认当日是否有增量数据，再核对上游采集批次完整性。</p>',
+    attachments: [{ name: '药品追溯字段说明.docx', type: 'word', size: '512 KB', contentText: '药品追溯 字段说明 本位码 批准文号 批次 生产企业' }],
+    ratings: [{ user: '吴强', score: 4, at: D(-70, 11, 0) }], comments: [], relatedIds: ['k13']
+  },
+  {
+    id: 'k17', no: 'ZS2026080017', title: '市级数据中心接入数据服务网关操作指引', categoryId: 'kc05', categoryName: '市级数据中心',
+    owner: '徐鹏', status: 'PUBLISHED', createdAt: D(-74, 14, 0), publishedAt: D(-72, 10, 0), refCount: 33,
+    contentText: '数据中心 网关接入 IP 白名单 应用注册 密钥 联调 专线',
+    contentHtml: '<h3>接入准备</h3><ul><li>完成应用注册并获取 appKey / appSecret；</li>' +
+      '<li>提交调用来源 IP（或专线地址段）用于白名单配置；</li><li>确认所需服务已在服务渠道授权中配置使用范围。</li></ul>' +
+      '<h3>联调步骤</h3><ol><li>在测试环境调用鉴权接口获取 token；</li><li>按服务文档构造请求并核对返回字段；</li>' +
+      '<li>联调通过后申请生产环境授权，切换生产密钥。</li></ol>' +
+      '<h3>常见故障</h3><p>401 / 403 多为密钥失效或白名单未生效；超时多与调用方网络出口或并发限制有关。</p>',
+    attachments: [], ratings: [{ user: '张建国', score: 5, at: D(-60, 15, 0) }],
+    comments: [{ user: '张建国', content: '按这个步骤接入，测试环境一次联调通过。', at: D(-60, 15, 0), ownerNotified: true }],
+    relatedIds: ['k01', 'k04']
+  },
+  {
+    id: 'k18', no: 'ZS2026080018', title: '区级平台数据上报字段校验规则', categoryId: 'kc05', categoryName: '市级数据中心',
+    owner: '陈志刚', status: 'PUBLISHED', createdAt: D(-56, 9, 0), publishedAt: D(-54, 14, 0), refCount: 27,
+    contentText: '区级平台 上报 字段校验 必填 格式 枚举 稽核 退回',
+    contentHtml: '<h3>校验层级</h3><ol><li>格式校验：日期、编码、金额格式；</li><li>必填校验：主键与关键业务字段不得为空；</li>' +
+      '<li>枚举校验：性别、参保类型等取值必须命中字典；</li><li>逻辑校验：出院日期不得早于入院日期等业务规则。</li></ol>' +
+      '<h3>退回处理</h3><p>校验不通过的数据按批次退回，上报方需在反馈后 1 个工作日内补正；连续两次退回将触发稽核告警并生成问题单。</p>',
+    attachments: [], ratings: [], comments: [], relatedIds: ['k08']
+  },
+  {
+    id: 'k19', no: 'ZS2026080019', title: '补数任务提交与结果验证规范', categoryId: 'kc022', categoryName: '数据加工与调度',
+    owner: '刘涛', status: 'PUBLISHED', createdAt: D(-38, 11, 0), publishedAt: D(-36, 9, 0), refCount: 45,
+    contentText: '补数 补推 任务 验证 批次 稽核 重跑',
+    contentHtml: '<h3>何时需要补数</h3><p>上游采集批次缺失、加工作业失败重跑、或已下发的推送任务发现数据错误时，需要提交补数任务。</p>' +
+      '<h3>提交要求</h3><ul><li>明确补数范围（业务日期区间 + 机构范围）；</li><li>说明补数原因并关联对应事件单或问题单；</li>' +
+      '<li>确认补数不会覆盖下游已确认的数据。</li></ul>' +
+      '<h3>结果验证</h3><p>补数完成后核对记录数、金额合计与稽核规则命中情况，并在事件单中记录验证结论。</p>',
+    attachments: [{ name: '补数任务提交模板.docx', type: 'word', size: '318 KB', contentText: '补数 模板 范围 原因 验证 记录数 金额合计' }],
+    ratings: [{ user: '朱琳', score: 5, at: D(-30, 10, 0) }], comments: [], relatedIds: ['k02']
+  },
+  withLive(() => ({
+    id: 'k20', no: liveNo('ZS2026080020'), title: '能力申请配额调整流程与材料要求', categoryId: 'kc013', categoryName: '能力开放门户',
+    owner: '王思远', status: 'PENDING_REVIEW', createdAt: D(-12, 15, 0), publishedAt: null, refCount: 9,
+    contentText: '能力申请 配额 存储 CUP 内存 调整 材料 审核',
+    contentHtml: '<h3>适用范围</h3><p>租户在能力开放门户申请的存储、CUP、内存配额需要调整时，按本流程提交材料。</p>' +
+      '<h3>材料要求</h3><ul><li>配额调整说明（当前用量、目标配额、调整原因）；</li><li>业务量测算依据；</li>' +
+      '<li>租户管理员确认意见。</li></ul>' +
+      '<h3>审核要点</h3><p>平台运营中心核对当前资源池余量与租户历史用量，必要时要求分批扩容。</p>',
+    attachments: [], ratings: [], comments: [], relatedIds: ['k12']
+  }))
 ];
 
 /* ======================================================== 知识问答 -- */
 const QNAS = [
   {
-    id: 'q01', no: 'WD2026010001', question: '文件服务下发的 CSV 文件中文乱码，如何解决？', asker: '朱琳', askerOrg: '区全民健康信息平台（朝阳区）', askedAt: D(-9, 10, 0),
+    id: 'q01', no: 'WD2026080001', question: '文件服务下发的 CSV 文件中文乱码，如何解决？', asker: '朱琳', askerOrg: '区全民健康信息平台（朝阳区）', askedAt: D(-9, 10, 0),
     status: 'ANSWERED',
     answers: [
       { id: 'a1', user: '陈志刚', content: '文件服务默认采用 UTF-8 with BOM 编码。请先确认取数规则中未自行指定编码；若使用 Excel 直接打开，建议通过「数据 → 从文本/CSV」导入并选择 UTF-8。', at: D(-9, 14, 0), clue: '编码 / 乱码 / 文件服务', isBest: false },
@@ -879,14 +1033,14 @@ const QNAS = [
     ]
   },
   {
-    id: 'q02', no: 'WD2026010002', question: '需求单被驳回后，是修改原单还是新建一单？', asker: '黄伟', askerOrg: '市应急管理局', askedAt: D(-7, 15, 0),
+    id: 'q02', no: 'WD2026080002', question: '需求单被驳回后，是修改原单还是新建一单？', asker: '黄伟', askerOrg: '市应急管理局', askedAt: D(-7, 15, 0),
     status: 'ANSWERED',
     answers: [
       { id: 'a1', user: '王思远', content: '驳回后原单会回到「已驳回」状态并保留完整审批意见。建议直接在原单上修改后重新提交，这样流转记录连续可追溯；仅当需求对象发生实质变化（如改为申请另一类资源）时才新建需求单。', at: D(-7, 16, 0), clue: '驳回 / 重新提交 / 流转记录', isBest: false }
     ]
   },
   {
-    id: 'q03', no: 'WD2026010003', question: 'L4 高敏感数据能否直接导出明细用于建模？', asker: '郑晓', askerOrg: '市疾病预防控制中心', askedAt: D(-5, 9, 0),
+    id: 'q03', no: 'WD2026080003', question: 'L4 高敏感数据能否直接导出明细用于建模？', asker: '郑晓', askerOrg: '市疾病预防控制中心', askedAt: D(-5, 9, 0),
     status: 'ARCHIVED',
     answers: [
       { id: 'a1', user: '周雅静', content: '不可以。L4 高敏感数据必须使用数据沙箱：训练沙箱接入数据样本训练模型，准生产沙箱接入真实脱敏数据运行，最终结果数据通过租户空间封装成服务输出，原始明细数据不出数据沙箱。', at: D(-5, 11, 0), clue: '沙箱 / 高敏感 / 原始明细', isBest: true },
@@ -895,18 +1049,18 @@ const QNAS = [
     archivedKnowledgeId: 'k06', archivedAt: D(-4, 10, 0)
   },
   {
-    id: 'q04', no: 'WD2026010004', question: '实时服务订阅时填写的需求工单号在哪里获取？', asker: '李慧敏', askerOrg: '市医疗保障局', askedAt: D(-3, 14, 0),
+    id: 'q04', no: 'WD2026080004', question: '实时服务订阅时填写的需求工单号在哪里获取？', asker: '李慧敏', askerOrg: '市医疗保障局', askedAt: D(-3, 14, 0),
     status: 'ANSWERED',
     answers: [
-      { id: 'a1', user: '赵敏', content: '需求工单号即需求单编号（形如 XQ202601xxxxx），在「需求单管理」列表中可直接查看。只有审批通过且状态为「已交付 / 实施中」的需求单才可用于订阅，系统会校验工单号与申请资源的一致性。', at: D(-3, 15, 0), clue: '需求工单号 / 订阅 / 校验', isBest: false }
+      { id: 'a1', user: '赵敏', content: '需求工单号即需求单编号（形如 XQ202608xxxxx），在「需求单管理」列表中可直接查看。只有审批通过且状态为「已交付 / 实施中」的需求单才可用于订阅，系统会校验工单号与申请资源的一致性。', at: D(-3, 15, 0), clue: '需求工单号 / 订阅 / 校验', isBest: false }
     ]
   },
-  {
-    id: 'q05', no: 'WD2026010005', question: '变更窗口中的「业务事件日程」数据来自哪里？', asker: '孙立', askerOrg: '三医联动信息化工作领导小组办公室', askedAt: D(-2, 10, 0),
+  withLive(() => ({
+    id: 'q05', no: liveNo('WD2026080005'), question: '变更窗口中的「业务事件日程」数据来自哪里？', asker: '孙立', askerOrg: '三医联动信息化工作领导小组办公室', askedAt: D(-2, 10, 0),
     status: 'ASKED', answers: []
-  },
+  })),
   {
-    id: 'q06', no: 'WD2026010006', question: '邮件提交的需求会自动建单吗？需要多久受理？', asker: '马超', askerOrg: '北京大学第三医院', askedAt: D(-1, 16, 0),
+    id: 'q06', no: 'WD2026080006', question: '邮件提交的需求会自动建单吗？需要多久受理？', asker: '马超', askerOrg: '北京大学第三医院', askedAt: D(-1, 16, 0),
     status: 'ANSWERED',
     answers: [
       { id: 'a1', user: '王思远', content: '服务台邮箱收到的申请会按预定义需求类别自动解析并生成需求单草稿，受理员核对信息后正式受理。现行受理时限为 4 小时。为避免解析失败，建议在邮件主题中标注需求类别。', at: D(-1, 17, 0), clue: '邮件建单 / 需求类别 / 受理时限', isBest: false }
@@ -916,16 +1070,18 @@ const QNAS = [
 
 /* ======================================================== 审计种子 -- */
 const AUDIT_SEED = [
-  { bizType: 'demands', bizId: 'd05', bizNo: 'XQ20260118005', bizTitle: '医保基金监管分析-门急诊费用数据申请', action: '审批通过', operator: '张建国', operatorOrg: '市卫生健康委员会 · 数据资源管理处', operatedAt: D(-6, 10, 0), ip: '10.20.11.42', terminal: 'Web 端 / Chrome', remark: '用途明确，同意共享，按 L3 脱敏后交付', changes: [{ field: 'status', before: '待审批', after: '审批通过' }] },
-  { bizType: 'changes', bizId: 'c02', bizNo: 'BG20260120002', bizTitle: '门急诊就诊明细查询服务-字段范围调整', action: '风险评估', operator: '刘涛', operatorOrg: '数据生产中心 · 加工组', operatedAt: D(-4, 15, 0), ip: '10.20.31.18', terminal: 'Web 端 / Chrome', remark: '影响模拟分析完成，影响 2 个配置项、1 个 API 服务、1 个租户', changes: [{ field: 'riskLevel', before: '（空）', after: '中' }] },
-  { bizType: 'tasks', bizId: 't03', bizNo: 'RW20260119003', bizTitle: '门急诊就诊明细视图加工', action: '接单', operator: '刘涛', operatorOrg: '数据生产中心 · 加工组', operatedAt: D(-7, 9, 0), ip: '10.20.31.18', terminal: 'Web 端 / Chrome', remark: '', changes: [{ field: 'status', before: '待接单', after: '实施中' }] },
-  { bizType: 'incidents', bizId: 'i02', bizNo: 'SJ20260125002', bizTitle: '【数据延迟】门急诊就诊记录未按时更新', action: '升级', operator: '徐鹏', operatorOrg: '运维中心 · 一线支持组', operatedAt: D(-1, 11, 0), ip: '10.20.22.7', terminal: 'Web 端 / Chrome', remark: '一线无法定位，升级至二线支持组', changes: [{ field: 'status', before: '处理中', after: '已升级' }, { field: 'handlerGroup', before: '运维中心 · 一线支持组', after: '运维中心 · 二线支持组' }] },
-  { bizType: 'problems', bizId: 'p01', bizNo: 'WT2026010001', bizTitle: '门急诊就诊记录批量延迟（根因：上游采集批次缺失）', action: '转入已知错误', operator: '陈志刚', operatorOrg: '运维中心 · 二线支持组', operatedAt: D(-1, 16, 0), ip: '10.20.22.9', terminal: 'Web 端 / Chrome', remark: '根因已定位，根治方案待上游改造，先提供临时方案', changes: [{ field: 'status', before: '分析中', after: '已知错误' }] },
-  { bizType: 'knowledges', bizId: 'k09', bizNo: 'ZS2026010009', bizTitle: '需求变更的风险评估与冲突分析要点', action: '提交审核', operator: '孙立', operatorOrg: '三医联动信息化工作领导小组办公室', operatedAt: D(-12, 10, 0), ip: '10.20.9.3', terminal: 'Web 端 / Chrome', remark: '', changes: [{ field: 'status', before: '草稿', after: '待审核' }] },
-  { bizType: 'releases', bizId: 'r02', bizNo: 'FB20260122002', bizTitle: '数据服务管理工具 v1.4.2 版本发布', action: '业务验证', operator: '陈志刚', operatorOrg: '运维中心 · 二线支持组', operatedAt: D(-3, 9, 0), ip: '10.20.22.9', terminal: 'Web 端 / Chrome', remark: '8 项验证全部通过', changes: [{ field: 'status', before: '已发布', after: '验证中' }] },
-  { bizType: 'subscriptions', bizId: 'sb03', bizNo: 'DY20260117003', bizTitle: '门急诊就诊明细查询服务订阅', action: '渠道授权', operator: '赵敏', operatorOrg: '平台运营中心', operatedAt: D(-6, 14, 0), ip: '10.20.44.12', terminal: 'Web 端 / Chrome', remark: '使用范围限定市医保局及其应用', changes: [{ field: 'channelAuth.useScope', before: '（空）', after: '市医疗保障局' }] },
-  { bizType: 'evaluations', bizId: 'ev03', bizNo: 'PJ20260123003', bizTitle: '对「医疗资源指标日度文件服务」的评价', action: '审批通过', operator: '张建国', operatorOrg: '市卫生健康委员会 · 数据资源管理处', operatedAt: D(-2, 10, 0), ip: '10.20.11.42', terminal: 'Web 端 / Chrome', remark: '评价内容属实，同意展示给供数方', changes: [{ field: 'status', before: '待审批', after: '审批通过' }] },
-  { bizType: 'tenants', bizId: 'tn03', bizNo: 'ZH20260110003', bizTitle: '市疾控中心监测租户注册申请', action: '审核通过', operator: '赵敏', operatorOrg: '平台运营中心', operatedAt: D(-150, 11, 0), ip: '10.20.44.12', terminal: 'Web 端 / Chrome', remark: '资质材料齐全', changes: [{ field: 'status', before: '待审核', after: '已通过' }] }
+  withLive(() => ({ bizType: 'demands', bizId: 'd05', bizNo: liveNo('XQ20260822005'), bizTitle: '医保基金监管分析-门急诊费用数据申请', action: '审批通过', operator: '张建国', operatorOrg: '市卫生健康委员会 · 数据资源管理处', operatedAt: D(-6, 10, 0), ip: '10.20.11.42', terminal: 'Web 端 / Chrome', remark: '用途明确，同意共享，按 L3 脱敏后交付', changes: [{ field: 'status', before: '待审批', after: '审批通过' }] })),
+  { bizType: 'changes', bizId: 'c02', bizNo: 'BG20260824002', bizTitle: '门急诊就诊明细查询服务-字段范围调整', action: '风险评估', operator: '刘涛', operatorOrg: '数据生产中心 · 加工组', operatedAt: D(-4, 15, 0), ip: '10.20.31.18', terminal: 'Web 端 / Chrome', remark: '影响模拟分析完成，影响 2 个配置项、1 个 API 服务、1 个租户', changes: [{ field: 'riskLevel', before: '（空）', after: '中' }] },
+  { bizType: 'tasks', bizId: 't03', bizNo: 'RW20260823003', bizTitle: '门急诊就诊明细视图加工', action: '接单', operator: '刘涛', operatorOrg: '数据生产中心 · 加工组', operatedAt: D(-7, 9, 0), ip: '10.20.31.18', terminal: 'Web 端 / Chrome', remark: '', changes: [{ field: 'status', before: '待接单', after: '实施中' }] },
+  withLive(() => ({ bizType: 'incidents', bizId: 'i02', bizNo: liveNo('SJ20260829002'), bizTitle: '【数据延迟】门急诊就诊记录未按时更新', action: '升级', operator: '徐鹏', operatorOrg: '运维中心 · 一线支持组', operatedAt: D(-1, 11, 0), ip: '10.20.22.7', terminal: 'Web 端 / Chrome', remark: '一线无法定位，升级至二线支持组', changes: [{ field: 'status', before: '处理中', after: '已升级' }, { field: 'handlerGroup', before: '运维中心 · 一线支持组', after: '运维中心 · 二线支持组' }] })),
+  withLive(() => ({ bizType: 'problems', bizId: 'p01', bizNo: liveNo('WT2026080001'), bizTitle: '门急诊就诊记录批量延迟（根因：上游采集批次缺失）', action: '转入已知错误', operator: '陈志刚', operatorOrg: '运维中心 · 二线支持组', operatedAt: D(-1, 16, 0), ip: '10.20.22.9', terminal: 'Web 端 / Chrome', remark: '根因已定位，根治方案待上游改造，先提供临时方案', changes: [{ field: 'status', before: '分析中', after: '已知错误' }] })),
+  withLive(() => ({ bizType: 'knowledges', bizId: 'k09', bizNo: liveNo('ZS2026080009'), bizTitle: '需求变更的风险评估与冲突分析要点', action: '提交审核', operator: '孙立', operatorOrg: '三医联动信息化工作领导小组办公室', operatedAt: D(-12, 10, 0), ip: '10.20.9.3', terminal: 'Web 端 / Chrome', remark: '', changes: [{ field: 'status', before: '草稿', after: '待审核' }] })),
+  { bizType: 'releases', bizId: 'r02', bizNo: 'FB20260826002', bizTitle: '数据服务管理工具 v1.4.2 版本发布', action: '业务验证', operator: '陈志刚', operatorOrg: '运维中心 · 二线支持组', operatedAt: D(-3, 9, 0), ip: '10.20.22.9', terminal: 'Web 端 / Chrome', remark: '8 项验证全部通过', changes: [{ field: 'status', before: '已发布', after: '验证中' }] },
+  withLive(() => ({ bizType: 'incidents', bizId: 'i06', bizNo: liveNo('SJ20260831005'), bizTitle: '【数据安全】疑似越权访问 L4 资源', action: '自动分派', operator: '系统', operatorOrg: '安全与合规管理处', operatedAt: D(0, 9, 30), ip: '10.20.5.2', terminal: '服务端规则引擎', remark: '命中越权访问规则，自动分派至安全与合规管理处', changes: [{ field: 'handlerGroup', before: '（空）', after: '安全与合规管理处' }] })),
+  withLive(() => ({ bizType: 'demands', bizId: 'd07', bizNo: liveNo('XQ20260829007'), bizTitle: '慢病管理分析-患者随访与标签数据申请', action: '受理需求单', operator: '王思远', operatorOrg: '三医数据底座服务台', operatedAt: D(0, 10, 0), ip: '10.20.11.8', terminal: 'Web 端 / Chrome', remark: '材料齐全，转资源归属方审批', changes: [{ field: 'status', before: '待受理', after: '已受理' }] })),
+  withLive(() => ({ bizType: 'subscriptions', bizId: 'sb03', bizNo: liveNo('DY20260821003'), bizTitle: '门急诊就诊明细查询服务订阅', action: '渠道授权', operator: '赵敏', operatorOrg: '平台运营中心', operatedAt: D(-6, 14, 0), ip: '10.20.44.12', terminal: 'Web 端 / Chrome', remark: '使用范围限定市医保局及其应用', changes: [{ field: 'channelAuth.useScope', before: '（空）', after: '市医疗保障局' }] })),
+  { bizType: 'evaluations', bizId: 'ev03', bizNo: 'PJ20260827003', bizTitle: '对「医疗资源指标日度文件服务」的评价', action: '审批通过', operator: '张建国', operatorOrg: '市卫生健康委员会 · 数据资源管理处', operatedAt: D(-2, 10, 0), ip: '10.20.11.42', terminal: 'Web 端 / Chrome', remark: '评价内容属实，同意展示给供数方', changes: [{ field: 'status', before: '待审批', after: '审批通过' }] },
+  { bizType: 'tenants', bizId: 'tn03', bizNo: 'ZH20260814003', bizTitle: '市疾控中心监测租户注册申请', action: '审核通过', operator: '赵敏', operatorOrg: '平台运营中心', operatedAt: D(-150, 11, 0), ip: '10.20.44.12', terminal: 'Web 端 / Chrome', remark: '资质材料齐全', changes: [{ field: 'status', before: '待审核', after: '已通过' }] }
 ];
 
 /* ============================================== 工单数据（函数式生成）-- */
@@ -933,12 +1089,12 @@ function buildDemands(): any[] {
   const rows = [
     /* 已评价：完整闭环样本，供"完整旅程"剧本使用 */
     {
-      id: 'd01', no: 'XQ20260112001', title: '医保基金监管分析-门急诊费用与就诊明细申请',
+      id: 'd01', no: 'XQ20260816001', title: '医保基金监管分析-门急诊费用与就诊明细申请',
       applicant: '李慧敏', applicantOrg: '市医疗保障局', tenantId: 't01', appId: 'app01',
       scene: '用于医保基金监管分析平台的门诊费用异常筛查，识别分解处方、超量开药等违规线索。',
       kind: 'EXISTING', resourceType: 'MODEL', deliveryForm: 'API',
       resources: ['r003', 'r007'], fields: ['visit_no', 'visit_date', 'dept_name', 'diagnosis_code', 'fee_total', 'settle_type'],
-      timeRange: '2024-01-01 ~ 2026-01-31', updateFreq: '每日增量', usePeriod: '12 个月', callVolume: 50000,
+      timeRange: '2024-01-01 ~ 2026-08-31', updateFreq: '每日增量', usePeriod: '12 个月', callVolume: 50000,
       desensitize: true, securityLevel: 'L3', priority: 'P1', status: 'EVALUATED', currentHandler: '—',
       source: 'WEB', submittedAt: D(-15, 10, 0), acceptedAt: D(-15, 14, 0), approvedAt: D(-13, 10, 0),
       deliveredAt: D(-9, 16, 0), evaluatedAt: D(-8, 10, 0), expectAt: D(-6, 18, 0),
@@ -949,14 +1105,14 @@ function buildDemands(): any[] {
         { at: D(-15, 14, 0), actor: '王思远', action: '服务台受理', comment: '用途明确，材料齐全，转资源归属方审批' },
         { at: D(-14, 9, 0), actor: '张建国', action: '资源归属方审批通过', comment: '同意共享，涉及 L3 敏感字段需脱敏' },
         { at: D(-13, 10, 0), actor: '周雅静', action: '安全合规审批通过', comment: '按 L3 级别掩码脱敏，授权范围限市医保局' },
-        { at: D(-13, 11, 0), actor: '王思远', action: '派发生产任务', comment: '生成任务单 RW20260114001' },
+        { at: D(-13, 11, 0), actor: '王思远', action: '派发生产任务', comment: '生成任务单 RW20260818001' },
         { at: D(-10, 15, 0), actor: '刘涛', action: '任务实施完成', comment: '完成字段级脱敏配置与视图加工' },
         { at: D(-9, 16, 0), actor: '赵敏', action: '交付与授权', comment: '订阅审批通过，已发放密钥并完成渠道授权' },
         { at: D(-8, 10, 0), actor: '李慧敏', action: '提交评价', comment: '数据质量好，交付及时' }
       ]
     },
-    {
-      id: 'd02', no: 'XQ20260116002', title: '药品不良反应监测-药品与器械信息申请',
+    withLive(() => ({
+      id: 'd02', no: liveNo('XQ20260820002'), title: '药品不良反应监测-药品与器械信息申请',
       applicant: '吴强', applicantOrg: '市药品监督管理局', tenantId: 't02', appId: 'app04',
       scene: '用于药品不良反应监测分析，关联药品基本信息与器械材料字典进行品种聚集性信号分析。',
       kind: 'EXISTING', resourceType: 'PARAM', deliveryForm: 'TABLE',
@@ -969,17 +1125,17 @@ function buildDemands(): any[] {
       timeline: [
         { at: D(-11, 9, 0), actor: '王思远', action: '服务台代提交需求单', comment: '需求方电话申报，服务台代录' },
         { at: D(-9, 15, 0), actor: '张建国', action: '资源归属方审批通过', comment: 'L1 公开数据，同意共享' },
-        { at: D(-9, 16, 0), actor: '王思远', action: '派发生产任务', comment: '生成任务单 RW20260118002' },
+        { at: D(-9, 16, 0), actor: '王思远', action: '派发生产任务', comment: '生成任务单 ' + liveNo('RW20260822002') },
         { at: D(-4, 10, 0), actor: '刘涛', action: '开始实施', comment: '按主数据标准完成字典贯标' }
       ]
-    },
+    })),
     {
-      id: 'd03', no: 'XQ20260119003', title: '三医一张图-医疗资源与床位数据申请',
+      id: 'd03', no: 'XQ20260823003', title: '三医一张图-医疗资源与床位数据申请',
       applicant: '张建国', applicantOrg: '市卫生健康委员会', tenantId: 't03', appId: 'app06',
       scene: '用于三医一张图可视化展示，需要各行政区医疗机构数、床位数、卫生人员数等资源指标。',
       kind: 'EXISTING', resourceType: 'METRIC', deliveryForm: 'FILE',
       resources: ['r013', 'r001'], fields: ['metric_code', 'metric_value', 'district', 'org_name', 'bed_count'],
-      timeRange: '2025-01-01 ~ 2026-01-31', updateFreq: '每日', usePeriod: '长期', callVolume: 0,
+      timeRange: '2025-01-01 ~ 2026-08-31', updateFreq: '每日', usePeriod: '长期', callVolume: 0,
       desensitize: false, securityLevel: 'L2', priority: 'P1', status: 'DELIVERED', currentHandler: '—',
       source: 'WEB', submittedAt: D(-8, 14, 0), acceptedAt: D(-8, 15, 0), approvedAt: D(-6, 11, 0),
       deliveredAt: D(-2, 10, 0), expectAt: D(-1, 18, 0), approver: '孙立',
@@ -988,13 +1144,13 @@ function buildDemands(): any[] {
         { at: D(-8, 14, 0), actor: '张建国', action: '提交需求单' },
         { at: D(-8, 15, 0), actor: '王思远', action: '服务台受理' },
         { at: D(-6, 11, 0), actor: '孙立', action: '资源归属方审批通过', comment: '本部门内部申请，同意' },
-        { at: D(-6, 12, 0), actor: '王思远', action: '派发生产任务', comment: '生成任务单 RW20260121004' },
+        { at: D(-6, 12, 0), actor: '王思远', action: '派发生产任务', comment: '生成任务单 RW20260825004' },
         { at: D(-3, 17, 0), actor: '刘涛', action: '任务实施完成' },
         { at: D(-2, 10, 0), actor: '赵敏', action: '文件服务订阅审批通过并下发', comment: '每日 03:00 全量下发' }
       ]
     },
-    {
-      id: 'd04', no: 'XQ20260121004', title: '传染病监测预警-报告信息与就诊记录申请',
+    withLive(() => ({
+      id: 'd04', no: liveNo('XQ20260825004'), title: '传染病监测预警-报告信息与就诊记录申请',
       applicant: '郑晓', applicantOrg: '市疾病预防控制中心', tenantId: 't04', appId: 'app08',
       scene: '用于传染病监测预警，需按日获取法定传染病报告信息与相关门急诊就诊记录进行症状监测。',
       kind: 'EXISTING', resourceType: 'MODEL', deliveryForm: 'API',
@@ -1009,12 +1165,12 @@ function buildDemands(): any[] {
         { at: D(-6, 10, 0), actor: '王思远', action: '服务台受理', comment: '公共卫生场景，加急处理' },
         { at: D(-5, 9, 0), actor: '张建国', action: '资源归属方审批通过' },
         { at: D(-4, 16, 0), actor: '周雅静', action: '安全合规审批通过', comment: '患者标识按 L3 掩码，禁止转供第三方' },
-        { at: D(-4, 17, 0), actor: '王思远', action: '派发生产任务', comment: '生成任务单 RW20260124005' },
+        { at: D(-4, 17, 0), actor: '王思远', action: '派发生产任务', comment: '生成任务单 ' + liveNo('RW20260828005') },
         { at: D(-1, 15, 0), actor: '刘涛', action: '提交待验收', comment: '实时推送链路已联调通过' }
       ]
-    },
-    {
-      id: 'd05', no: 'XQ20260118005', title: '医保支付方式改革评估-结算与住院数据申请',
+    })),
+    withLive(() => ({
+      id: 'd05', no: liveNo('XQ20260822005'), title: '医保支付方式改革评估-结算与住院数据申请',
       applicant: '李慧敏', applicantOrg: '市医疗保障局', tenantId: 't01', appId: 'app03',
       scene: '用于 DRG/DIP 支付方式改革效果评估，需住院结算数据与主要诊断、手术信息。',
       kind: 'EXISTING', resourceType: 'MODEL', deliveryForm: 'TABLE',
@@ -1029,9 +1185,9 @@ function buildDemands(): any[] {
         { at: D(-5, 14, 0), actor: '王思远', action: '服务台受理' },
         { at: D(-2, 10, 0), actor: '张建国', action: '资源归属方审批通过', comment: '同意共享，待派发生产任务' }
       ]
-    },
-    {
-      id: 'd06', no: 'XQ20260124006', title: '突发公共事件应急调度-医疗资源与急救信息申请',
+    })),
+    withLive(() => ({
+      id: 'd06', no: liveNo('XQ20260828006'), title: '突发公共事件应急调度-医疗资源与急救信息申请',
       applicant: '黄伟', applicantOrg: '市应急管理局', tenantId: 't05', appId: null,
       scene: '突发事件应急指挥时需快速掌握周边医疗资源与急救调度能力，用于应急力量调度决策。',
       kind: 'EXISTING', resourceType: 'MODEL', deliveryForm: 'API',
@@ -1045,9 +1201,9 @@ function buildDemands(): any[] {
         { at: D(-2, 9, 0), actor: '王思远', action: '服务台受理', comment: '应急场景，标记 P0 加急' },
         { at: D(-2, 9, 0), actor: '王思远', action: '提交资源归属方审批', comment: '等待市卫健委审批' }
       ]
-    },
-    {
-      id: 'd07', no: 'XQ20260125007', title: '慢病管理分析-患者随访与标签数据申请',
+    })),
+    withLive(() => ({
+      id: 'd07', no: liveNo('XQ20260829007'), title: '慢病管理分析-患者随访与标签数据申请',
       applicant: '郑晓', applicantOrg: '市疾病预防控制中心', tenantId: 't04', appId: 'app08',
       scene: '用于高血压、糖尿病患者管理效果评估，需随访记录与慢病管理标签。',
       kind: 'EXISTING', resourceType: 'TAG', deliveryForm: 'TABLE',
@@ -1057,9 +1213,9 @@ function buildDemands(): any[] {
       source: 'SELF', submittedAt: D(-1, 14, 0), expectAt: D(6, 18, 0),
       relatedIncidentIds: [], relatedProblemIds: [], taskIds: [], changeIds: [], subscriptionIds: [],
       timeline: [{ at: D(-1, 14, 0), actor: '郑晓', action: '通过自助服务提交需求单', comment: '等待服务台受理' }]
-    },
-    {
-      id: 'd08', no: 'XQ20260126008', title: '新增采集需求-药品流通与采购信息',
+    })),
+    withLive(() => ({
+      id: 'd08', no: liveNo('XQ20260830008'), title: '新增采集需求-药品流通与采购信息',
       applicant: '吴强', applicantOrg: '市药品监督管理局', tenantId: 't02', appId: 'app05',
       scene: '现有主题库未覆盖药品流通环节数据，需新增采集药品采购与库存信息，支撑药品供应保障分析。',
       kind: 'NEW', resourceType: 'RAW', deliveryForm: 'TABLE',
@@ -1073,12 +1229,12 @@ function buildDemands(): any[] {
         { at: D(-3, 10, 0), actor: '吴强', action: '基于「新增数据采集 / 加工需求」模板提交' },
         { at: D(-3, 11, 0), actor: '王思远', action: '服务台受理', comment: '确认主题库确实未覆盖' },
         { at: D(-1, 15, 0), actor: '张建国', action: '资源归属方审批通过' },
-        { at: D(-1, 16, 0), actor: '王思远', action: '派发采集与加工任务', comment: '生成任务单 RW20260126006' },
+        { at: D(-1, 16, 0), actor: '王思远', action: '派发采集与加工任务', comment: '生成任务单 ' + liveNo('RW20260830006') },
         { at: D(0, 9, 0), actor: '何静', action: '开始实施', comment: '与药监局协调采集接口' }
       ]
-    },
+    })),
     {
-      id: 'd09', no: 'XQ20260115009', title: '科研课题-重点疾病分布与手术信息申请',
+      id: 'd09', no: 'XQ20260819009', title: '科研课题-重点疾病分布与手术信息申请',
       applicant: '马超', applicantOrg: '北京大学第三医院', tenantId: 't03', appId: 'app07',
       scene: '心血管疾病区域分布科研课题，需在数据沙箱内使用，成果仅输出统计结果。',
       kind: 'EXISTING', resourceType: 'MODEL', deliveryForm: 'FILE',
@@ -1095,8 +1251,8 @@ function buildDemands(): any[] {
         { at: D(-10, 10, 0), actor: '张建国', action: '审批驳回', comment: '申请范围超出课题必要范围，请缩小字段范围并补充立项证明' }
       ]
     },
-    {
-      id: 'd10', no: 'XQ20260126010', title: '儿童免疫接种分析-接种记录申请',
+    withLive(() => ({
+      id: 'd10', no: liveNo('XQ20260830010'), title: '儿童免疫接种分析-接种记录申请',
       applicant: '郑晓', applicantOrg: '市疾病预防控制中心', tenantId: 't04', appId: null,
       scene: '用于免疫接种覆盖率分析与查漏补种。',
       kind: 'EXISTING', resourceType: 'MODEL', deliveryForm: 'TABLE',
@@ -1106,9 +1262,9 @@ function buildDemands(): any[] {
       source: 'WEB', submittedAt: null, expectAt: null,
       relatedIncidentIds: [], relatedProblemIds: [], taskIds: [], changeIds: [], subscriptionIds: [],
       timeline: [{ at: D(-1, 17, 0), actor: '郑晓', action: '保存草稿', comment: '待补充字段级申请清单' }]
-    },
+    })),
     {
-      id: 'd11', no: 'XQ20260123011', title: '药品不良反应聚集性信号分析-补充数据申请',
+      id: 'd11', no: 'XQ20260827011', title: '药品不良反应聚集性信号分析-补充数据申请',
       applicant: '吴强', applicantOrg: '市药品监督管理局', tenantId: 't02', appId: 'app04',
       scene: '在药品不良反应监测基础上补充门急诊就诊数据，用于聚集性信号验证。',
       kind: 'EXISTING', resourceType: 'MODEL', deliveryForm: 'API',
@@ -1122,8 +1278,8 @@ function buildDemands(): any[] {
         { at: D(-4, 16, 0), actor: '吴强', action: '撤回需求单', comment: '需求范围需与业务处室再确认，撤回后修改重新提交' }
       ]
     },
-    {
-      id: 'd12', no: 'XQ20260117012', title: '医疗资源专题-卫生人员与床位数据申请',
+    withLive(() => ({
+      id: 'd12', no: liveNo('XQ20260821012'), title: '医疗资源专题-卫生人员与床位数据申请',
       applicant: '张建国', applicantOrg: '市卫生健康委员会', tenantId: 't03', appId: 'app07',
       scene: '医疗资源专题分析，需卫生人员职称结构与床位使用情况数据。',
       kind: 'EXISTING', resourceType: 'MODEL', deliveryForm: 'TABLE',
@@ -1139,14 +1295,14 @@ function buildDemands(): any[] {
         { at: D(-4, 16, 0), actor: '赵敏', action: '交付（库表视图授权）' },
         { at: D(-2, 11, 0), actor: '张建国', action: '发起需求变更', comment: '补充「科室床位使用率」字段，变更单 c01' }
       ]
-    },
-    {
-      id: 'd13', no: 'XQ20260122013', title: '京智三医联动可视化-指标与标签数据申请',
+    })),
+    withLive(() => ({
+      id: 'd13', no: liveNo('XQ20260826013'), title: '京智三医联动可视化-指标与标签数据申请',
       applicant: '孙立', applicantOrg: '三医联动信息化工作领导小组办公室', tenantId: 't03', appId: 'app06',
       scene: '面向决策层的三医联动可视化分析，需医疗资源指标与慢病标签汇总数据。',
       kind: 'EXISTING', resourceType: 'METRIC', deliveryForm: 'API',
       resources: ['r013', 'r014'], fields: ['metric_code', 'metric_value', 'tag_code', 'tag_value'],
-      timeRange: '2025-01-01 ~ 2026-01-31', updateFreq: '每日', usePeriod: '长期', callVolume: 100000,
+      timeRange: '2025-01-01 ~ 2026-08-31', updateFreq: '每日', usePeriod: '长期', callVolume: 100000,
       desensitize: true, securityLevel: 'L2', priority: 'P1', status: 'PENDING_ACCEPTANCE', currentHandler: '孙立',
       source: 'WEB', submittedAt: D(-5, 9, 0), acceptedAt: D(-5, 10, 0), approvedAt: D(-3, 14, 0),
       expectAt: D(0, 18, 0), approver: '张建国',
@@ -1156,9 +1312,9 @@ function buildDemands(): any[] {
         { at: D(-3, 14, 0), actor: '张建国', action: '审批通过' },
         { at: D(-1, 10, 0), actor: '刘涛', action: '提交待验收' }
       ]
-    },
+    })),
     {
-      id: 'd14', no: 'XQ20260120014', title: '血液管理专题-血液采集与供应数据申请',
+      id: 'd14', no: 'XQ20260824014', title: '血液管理专题-血液采集与供应数据申请',
       applicant: '张建国', applicantOrg: '市卫生健康委员会', tenantId: 't03', appId: 'app07',
       scene: '血液管理专题分析，需血液采集、检测与供应数据。',
       kind: 'EXISTING', resourceType: 'MODEL', deliveryForm: 'FILE',
@@ -1175,7 +1331,7 @@ function buildDemands(): any[] {
       ]
     },
     {
-      id: 'd15', no: 'XQ20260113015', title: '死亡登记与人口健康分析-基础信息申请',
+      id: 'd15', no: 'XQ20260817015', title: '死亡登记与人口健康分析-基础信息申请',
       applicant: '李慧敏', applicantOrg: '市医疗保障局', tenantId: 't01', appId: 'app02',
       scene: '参保人健康画像分析，需死亡登记信息用于参保状态核验。',
       kind: 'EXISTING', resourceType: 'MODEL', deliveryForm: 'TABLE',
@@ -1191,31 +1347,31 @@ function buildDemands(): any[] {
       ]
     },
     /* 由事件创建的需求（体现"通过事件、问题来创建需求"） */
-    {
-      id: 'd16', no: 'XQ20260126016', title: '门急诊就诊记录数据延迟整改-服务能力提升需求',
+    withLive(() => ({
+      id: 'd16', no: liveNo('XQ20260830016'), title: '门急诊就诊记录数据延迟整改-服务能力提升需求',
       applicant: '陈志刚', applicantOrg: '运维中心 · 二线支持组', tenantId: 't03', appId: 'app06',
-      scene: '针对事件 SJ20260125002（门急诊就诊记录未按时更新）暴露的采集批次缺失问题，提出服务能力提升需求。',
+      scene: '针对事件 ' + liveNo('SJ20260829002') + '（门急诊就诊记录未按时更新）暴露的采集批次缺失问题，提出服务能力提升需求。',
       kind: 'NEW', resourceType: 'RAW', deliveryForm: 'TABLE',
       resources: [], fields: [], newDataDesc: '新增上游采集批次完整性校验机制与批次缺失自动补采能力，涉及采集调度与稽核规则调整。',
-      timeRange: '自 2026-02-01 起', updateFreq: '每日', usePeriod: '长期', callVolume: 0,
+      timeRange: '自 ' + DD(1) + ' 起', updateFreq: '每日', usePeriod: '长期', callVolume: 0,
       desensitize: false, securityLevel: 'L2', priority: 'P1', status: 'PENDING_APPROVE', currentHandler: '张建国',
       source: 'EVENT', submittedAt: D(-1, 10, 0), acceptedAt: D(-1, 11, 0), expectAt: D(10, 18, 0),
       relatedIncidentIds: ['i02'], relatedProblemIds: ['p01'], taskIds: [], changeIds: [], subscriptionIds: [],
       timeline: [
-        { at: D(-1, 10, 0), actor: '陈志刚', action: '由事件单 SJ20260125002 创建需求单', comment: '作为问题 p01 的根治方案落地载体' },
+        { at: D(-1, 10, 0), actor: '陈志刚', action: '由事件单 ' + liveNo('SJ20260829002') + ' 创建需求单', comment: '作为问题 p01 的根治方案落地载体' },
         { at: D(-1, 11, 0), actor: '王思远', action: '服务台受理' },
         { at: D(-1, 11, 0), actor: '王思远', action: '提交资源归属方审批' }
       ]
-    }
+    }))
   ];
   return rows;
 }
 
 function buildChanges(): any[] {
   return [
-    {
-      id: 'c01', no: 'BG20260125001', title: '医疗资源专题-卫生人员数据补充字段变更',
-      demandId: 'd12', demandNo: 'XQ20260117012', category: '范围变更', priority: 'P2',
+    withLive(() => ({
+      id: 'c01', no: liveNo('BG20260829001'), title: '医疗资源专题-卫生人员数据补充字段变更',
+      demandId: 'd12', demandNo: liveNo('XQ20260821012'), category: '范围变更', priority: 'P2',
       implementDate: DD(2), requestor: '张建国', implementer: '刘涛',
       plan: '在已交付的卫生人员视图上补充「科室床位使用率」字段，同步更新库表视图授权范围，变更后向已授权用户同步更新。',
       resources: ['r002', 'r001'], riskLevel: '中', status: 'IMPLEMENTING',
@@ -1226,7 +1382,7 @@ function buildChanges(): any[] {
         suggestion: '建议在业务低峰期（22:00 之后）执行视图重建，重建期间文件服务沿用上一版本快照，避免订阅方取到中间态数据。'
       },
       conflicts: [
-        { type: '时间窗', with: 'c03（医保结算增量文件服务字段扩展）', desc: '两个变更的实施窗口重叠（同为 01-29 22:00-24:00），且均依赖 ci03 HIVE 集群资源。', suggestion: '建议将本变更顺延至 01-30 22:00 执行，错开重算窗口。' },
+        { type: '时间窗', with: 'c03（医保结算增量文件服务字段扩展）', desc: '两个变更的实施窗口重叠（同为 ' + DD(2).slice(5) + ' 22:00-24:00），且均依赖 ci03 HIVE 集群资源。', suggestion: '建议将本变更顺延至 ' + DD(3).slice(5) + ' 22:00 执行，错开重算窗口。' },
         { type: '服务依赖', with: 'sv07 医疗机构信息全量文件服务', desc: 'sv07 依赖本变更涉及的 dwd_org_medical_institution，变更期间服务若被调用可能返回字段缺失。', suggestion: '建议变更前发布服务维护公告，或启用灰度视图后切换。' }
       ],
       submittedAt: D(-2, 11, 0), approvedAt: D(-1, 10, 0), approver: '孙立', expectAt: DD(2),
@@ -1238,10 +1394,10 @@ function buildChanges(): any[] {
         { at: D(-1, 10, 0), actor: '孙立', action: '变更审批通过', comment: '同意变更，实施窗口按冲突分析建议顺延' },
         { at: D(0, 9, 0), actor: '刘涛', action: '开始实施' }
       ]
-    },
-    {
-      id: 'c02', no: 'BG20260123002', title: '门急诊就诊明细查询服务-字段范围调整',
-      demandId: 'd01', demandNo: 'XQ20260112001', category: '服务变更', priority: 'P1',
+    })),
+    withLive(() => ({
+      id: 'c02', no: liveNo('BG20260827002'), title: '门急诊就诊明细查询服务-字段范围调整',
+      demandId: 'd01', demandNo: 'XQ20260816001', category: '服务变更', priority: 'P1',
       implementDate: DD(1), requestor: '李慧敏', implementer: '赵敏',
       plan: '在门急诊就诊明细查询服务中增加「settle_type 结算类别」出参字段，同步更新接口文档并通知已订阅应用。',
       resources: ['r003'], riskLevel: '中', status: 'APPROVED',
@@ -1252,7 +1408,7 @@ function buildChanges(): any[] {
         suggestion: '字段为新增出参，对既有调用方向后兼容；建议同步更新接口文档并向 3 个已订阅应用发送变更通知。'
       },
       conflicts: [
-        { type: '资源占用', with: 'c03（医保结算增量文件服务字段扩展）', desc: '两个变更均需重建 DORIS 上的聚合视图，存在资源竞争。', suggestion: '建议错峰执行，本变更安排在 01-28 20:00 执行。' }
+        { type: '资源占用', with: 'c03（医保结算增量文件服务字段扩展）', desc: '两个变更均需重建 DORIS 上的聚合视图，存在资源竞争。', suggestion: '建议错峰执行，本变更安排在 ' + DD(1).slice(5) + ' 20:00 执行。' }
       ],
       submittedAt: D(-4, 15, 0), approvedAt: D(-3, 11, 0), approver: '孙立', expectAt: DD(1),
       relatedIncidentIds: [], relatedProblemIds: [],
@@ -1262,10 +1418,10 @@ function buildChanges(): any[] {
         { at: D(-3, 9, 0), actor: '陈志刚', action: '冲突分析', comment: '检出资源占用冲突 1 项' },
         { at: D(-3, 11, 0), actor: '孙立', action: '变更审批通过' }
       ]
-    },
-    {
-      id: 'c03', no: 'BG20260126003', title: '医保结算增量文件服务-字段扩展变更',
-      demandId: 'd05', demandNo: 'XQ20260118005', category: '资源变更', priority: 'P1',
+    })),
+    withLive(() => ({
+      id: 'c03', no: liveNo('BG20260830003'), title: '医保结算增量文件服务-字段扩展变更',
+      demandId: 'd05', demandNo: liveNo('XQ20260822005'), category: '资源变更', priority: 'P1',
       implementDate: DD(2), requestor: '李慧敏', implementer: '刘涛',
       plan: '在医保结算增量文件中增加 DRG 分组相关字段（drg_code、drg_group），支撑支付方式改革评估。',
       resources: ['r007'], riskLevel: '高', status: 'PENDING_APPROVE',
@@ -1279,10 +1435,10 @@ function buildChanges(): any[] {
       submittedAt: D(-1, 14, 0), expectAt: DD(2),
       relatedIncidentIds: [], relatedProblemIds: [],
       timeline: [{ at: D(-1, 14, 0), actor: '李慧敏', action: '发起需求变更', comment: 'DRG 评估需要分组字段' }]
-    },
+    })),
     {
-      id: 'c04', no: 'BG20260120004', title: '医疗资源指标口径调整（每千人口床位数）',
-      demandId: 'd03', demandNo: 'XQ20260119003', category: '范围变更', priority: 'P2',
+      id: 'c04', no: 'BG20260824004', title: '医疗资源指标口径调整（每千人口床位数）',
+      demandId: 'd03', demandNo: 'XQ20260823003', category: '范围变更', priority: 'P2',
       implementDate: DD(-2), requestor: '张建国', implementer: '刘涛',
       plan: '按最新常住人口口径调整「每千人口床位数」指标分母。',
       resources: ['r013'], riskLevel: '低', status: 'DONE',
@@ -1297,9 +1453,9 @@ function buildChanges(): any[] {
         { at: D(-2, 16, 0), actor: '刘涛', action: '变更完成', comment: '已同步更新指标说明与知识条目 k13' }
       ]
     },
-    {
-      id: 'c05', no: 'BG20260127005', title: '传染病报告实时推送服务-推送频率调整',
-      demandId: 'd04', demandNo: 'XQ20260121004', category: '计划变更', priority: 'P1',
+    withLive(() => ({
+      id: 'c05', no: liveNo('BG20260831005'), title: '传染病报告实时推送服务-推送频率调整',
+      demandId: 'd04', demandNo: liveNo('XQ20260825004'), category: '计划变更', priority: 'P1',
       implementDate: DD(3), requestor: '郑晓', implementer: '刘涛',
       plan: '将传染病报告实时推送频率由 5 分钟调整为 1 分钟，满足疾控监测预警时效要求。',
       resources: ['r010'], riskLevel: '中', status: 'PENDING_APPROVE',
@@ -1308,10 +1464,10 @@ function buildChanges(): any[] {
       submittedAt: D(0, 9, 0), expectAt: DD(3),
       relatedIncidentIds: [], relatedProblemIds: [],
       timeline: [{ at: D(0, 9, 0), actor: '郑晓', action: '发起需求变更' }]
-    },
+    })),
     {
-      id: 'c06', no: 'BG20260119006', title: '药品字典贯标范围变更',
-      demandId: 'd02', demandNo: 'XQ20260116002', category: '资源变更', priority: 'P3',
+      id: 'c06', no: 'BG20260823006', title: '药品字典贯标范围变更',
+      demandId: 'd02', demandNo: liveNo('XQ20260820002'), category: '资源变更', priority: 'P3',
       implementDate: DD(-4), requestor: '吴强', implementer: '刘涛',
       plan: '扩大药品字典贯标范围，纳入院内制剂品种。',
       resources: ['r005'], riskLevel: '低', status: 'WITHDRAWN',
@@ -1329,8 +1485,8 @@ function buildChanges(): any[] {
 function buildTasks(): any[] {
   return [
     {
-      id: 't01', no: 'RW20260114001', title: '门急诊就诊明细视图加工与脱敏配置', type: '数据加工',
-      source: 'DEMAND', sourceId: 'd01', sourceNo: 'XQ20260112001',
+      id: 't01', no: 'RW20260818001', title: '门急诊就诊明细视图加工与脱敏配置', type: '数据加工',
+      source: 'DEMAND', sourceId: 'd01', sourceNo: 'XQ20260816001',
       dept: '数据生产中心 · 加工组', assignee: '刘涛', priority: 'P1',
       planStart: DD(-13), planEnd: DD(-10), progress: 100, status: 'DONE', verifyResult: '通过',
       content: '基于 dwd_visit_outpatient 与 dwd_mi_settlement 加工门急诊就诊明细视图，完成字段级 L3 掩码脱敏配置，输出可供 API 服务调用的结果表。',
@@ -1343,16 +1499,16 @@ function buildTasks(): any[] {
       ],
       relatedProblemIds: [],
       timeline: [
-        { at: D(-13, 11, 0), actor: '王思远', action: '派发任务', comment: '承接需求单 XQ20260112001' },
+        { at: D(-13, 11, 0), actor: '王思远', action: '派发任务', comment: '承接需求单 XQ20260816001' },
         { at: D(-13, 14, 0), actor: '刘涛', action: '接单' },
         { at: D(-11, 17, 0), actor: '刘涛', action: '填报进度 60%', comment: '视图主体开发完成，进入脱敏配置' },
         { at: D(-10, 15, 0), actor: '刘涛', action: '提交验证', comment: '脱敏效果自测通过' },
         { at: D(-10, 16, 0), actor: '张建国', action: '验证通过', comment: '抽样比对一致，脱敏符合 L3 要求' }
       ]
     },
-    {
-      id: 't02', no: 'RW20260118002', title: '药品与器械字典贯标加工', type: '数据加工',
-      source: 'DEMAND', sourceId: 'd02', sourceNo: 'XQ20260116002',
+    withLive(() => ({
+      id: 't02', no: liveNo('RW20260822002'), title: '药品与器械字典贯标加工', type: '数据加工',
+      source: 'DEMAND', sourceId: 'd02', sourceNo: liveNo('XQ20260820002'),
       dept: '数据生产中心 · 加工组', assignee: '刘涛', priority: 'P2',
       planStart: DD(-9), planEnd: DD(-1), progress: 75, status: 'DOING',
       content: '按三医主数据标准完成药品基本信息与医疗器械材料字典的贯标，输出标准字典表供资源目录检索与关联。',
@@ -1369,10 +1525,10 @@ function buildTasks(): any[] {
         { at: D(-9, 17, 0), actor: '刘涛', action: '接单' },
         { at: D(-3, 15, 0), actor: '刘涛', action: '填报进度 75%', comment: '编码映射完成，剩余验证工作' }
       ]
-    },
+    })),
     {
-      id: 't03', no: 'RW20260119003', title: '门急诊就诊明细视图加工（第二批字段）', type: '数据加工',
-      source: 'DEMAND', sourceId: 'd01', sourceNo: 'XQ20260112001',
+      id: 't03', no: 'RW20260823003', title: '门急诊就诊明细视图加工（第二批字段）', type: '数据加工',
+      source: 'DEMAND', sourceId: 'd01', sourceNo: 'XQ20260816001',
       dept: '数据生产中心 · 加工组', assignee: '刘涛', priority: 'P2',
       planStart: DD(-7), planEnd: DD(-2), progress: 100, status: 'DONE', verifyResult: '通过',
       content: '补充结算类别等字段的门急诊就诊明细视图加工。',
@@ -1387,8 +1543,8 @@ function buildTasks(): any[] {
       ]
     },
     {
-      id: 't04', no: 'RW20260121004', title: '医疗资源指标日度快照加工', type: '数据建模',
-      source: 'DEMAND', sourceId: 'd03', sourceNo: 'XQ20260119003',
+      id: 't04', no: 'RW20260825004', title: '医疗资源指标日度快照加工', type: '数据建模',
+      source: 'DEMAND', sourceId: 'd03', sourceNo: 'XQ20260823003',
       dept: '数据生产中心 · 建模组', assignee: '刘涛', priority: 'P1',
       planStart: DD(-6), planEnd: DD(-3), progress: 100, status: 'DONE', verifyResult: '通过',
       content: '构建医疗资源指标日度快照模型，覆盖 32 项指标的行政区维度汇总。',
@@ -1402,9 +1558,9 @@ function buildTasks(): any[] {
         { at: D(-3, 18, 0), actor: '张建国', action: '验证通过' }
       ]
     },
-    {
-      id: 't05', no: 'RW20260124005', title: '传染病报告实时推送链路联调', type: '服务封装',
-      source: 'DEMAND', sourceId: 'd04', sourceNo: 'XQ20260121004',
+    withLive(() => ({
+      id: 't05', no: liveNo('RW20260828005'), title: '传染病报告实时推送链路联调', type: '服务封装',
+      source: 'DEMAND', sourceId: 'd04', sourceNo: liveNo('XQ20260825004'),
       dept: '数据生产中心 · 加工组', assignee: '刘涛', priority: 'P0',
       planStart: DD(-4), planEnd: DD(0), progress: 90, status: 'PENDING_VERIFY',
       content: '封装传染病报告实时推送服务，联调 Kafka → Flink → 订阅方通道，完成 L3 脱敏后推送。',
@@ -1417,10 +1573,10 @@ function buildTasks(): any[] {
         { at: D(-4, 17, 0), actor: '刘涛', action: '接单' },
         { at: D(-1, 15, 0), actor: '刘涛', action: '提交验证', comment: '实时推送链路已联调通过，等待验收' }
       ]
-    },
-    {
-      id: 't06', no: 'RW20260126006', title: '药品采购与库存数据采集（新增数据源）', type: '数据采集',
-      source: 'DEMAND', sourceId: 'd08', sourceNo: 'XQ20260126008',
+    })),
+    withLive(() => ({
+      id: 't06', no: liveNo('RW20260830006'), title: '药品采购与库存数据采集（新增数据源）', type: '数据采集',
+      source: 'DEMAND', sourceId: 'd08', sourceNo: liveNo('XQ20260830008'),
       dept: '数据生产中心 · 采集组', assignee: '何静', priority: 'P1',
       planStart: DD(-1), planEnd: DD(12), progress: 15, status: 'DOING',
       content: '对接药监局药品流通系统，新增采集药品采购信息与药品库存信息，按三医主数据标准完成贯标后入 ODS 层。',
@@ -1433,25 +1589,25 @@ function buildTasks(): any[] {
       ],
       relatedProblemIds: [],
       timeline: [
-        { at: D(-1, 16, 0), actor: '王思远', action: '派发任务', comment: '承接新增资产需求 XQ20260126008' },
+        { at: D(-1, 16, 0), actor: '王思远', action: '派发任务', comment: '承接新增资产需求 ' + liveNo('XQ20260830008') },
         { at: D(0, 9, 0), actor: '何静', action: '接单并开始实施', comment: '已与药监局信息处对接采集接口' }
       ]
-    },
-    {
-      id: 't07', no: 'RW20260118007', title: '卫生人员视图字段补充（变更实施）', type: '数据加工',
-      source: 'MANUAL', sourceId: 'c01', sourceNo: 'BG20260125001',
+    })),
+    withLive(() => ({
+      id: 't07', no: liveNo('RW20260822007'), title: '卫生人员视图字段补充（变更实施）', type: '数据加工',
+      source: 'MANUAL', sourceId: 'c01', sourceNo: liveNo('BG20260829001'),
       dept: '数据生产中心 · 加工组', assignee: '刘涛', priority: 'P2',
       planStart: DD(2), planEnd: DD(4), progress: 0, status: 'PENDING_ACCEPT',
-      content: '按变更单 BG20260125001 要求在卫生人员视图补充「科室床位使用率」字段，并同步更新授权。',
+      content: '按变更单 ' + liveNo('BG20260829001') + ' 要求在卫生人员视图补充「科室床位使用率」字段，并同步更新授权。',
       deliverable: '视图 v_medical_staff v2（含床位使用率）',
       resources: ['r002', 'r001'],
       milestones: [{ name: '视图重建', planDate: DD(2) }, { name: '授权同步', planDate: DD(3) }, { name: '验证', planDate: DD(4) }],
       relatedProblemIds: [],
       timeline: [{ at: D(0, 9, 0), actor: '孙立', action: '由变更单派发任务' }]
-    },
-    {
-      id: 't08', no: 'RW20260123008', title: '可视化指标 API 封装', type: '服务封装',
-      source: 'DEMAND', sourceId: 'd13', sourceNo: 'XQ20260122013',
+    })),
+    withLive(() => ({
+      id: 't08', no: liveNo('RW20260827008'), title: '可视化指标 API 封装', type: '服务封装',
+      source: 'DEMAND', sourceId: 'd13', sourceNo: liveNo('XQ20260826013'),
       dept: '数据生产中心 · 加工组', assignee: '刘涛', priority: 'P1',
       planStart: DD(-3), planEnd: DD(-1), progress: 100, status: 'PENDING_VERIFY',
       content: '封装医疗资源指标与慢病标签汇总查询 API，供京智三医联动可视化调用。',
@@ -1463,22 +1619,22 @@ function buildTasks(): any[] {
         { at: D(-3, 15, 0), actor: '王思远', action: '派发任务' },
         { at: D(-1, 10, 0), actor: '刘涛', action: '提交验证' }
       ]
-    },
-    {
-      id: 't09', no: 'RW20260125009', title: '门急诊就诊记录延迟整改-采集批次完整性校验', type: '数据加工',
-      source: 'PROBLEM', sourceId: 'p01', sourceNo: 'WT2026010001',
+    })),
+    withLive(() => ({
+      id: 't09', no: liveNo('RW20260829009'), title: '门急诊就诊记录延迟整改-采集批次完整性校验', type: '数据加工',
+      source: 'PROBLEM', sourceId: 'p01', sourceNo: liveNo('WT2026080001'),
       dept: '数据生产中心 · 加工组', assignee: '何静', priority: 'P1',
       planStart: DD(1), planEnd: DD(8), progress: 0, status: 'PENDING_ACCEPT',
-      content: '根据问题单 WT2026010001 的根因结论，新增上游采集批次完整性校验机制，批次缺失时自动告警并触发补采。',
+      content: '根据问题单 ' + liveNo('WT2026080001') + ' 的根因结论，新增上游采集批次完整性校验机制，批次缺失时自动告警并触发补采。',
       deliverable: '批次完整性校验作业 + 告警规则配置',
       resources: ['r003'],
       milestones: [{ name: '方案设计', planDate: DD(2) }, { name: '开发', planDate: DD(5) }, { name: '验证', planDate: DD(8) }],
       relatedProblemIds: ['p01'],
       timeline: [{ at: D(-1, 17, 0), actor: '陈志刚', action: '由问题单创建任务单', comment: '作为根因整改措施' }]
-    },
+    })),
     {
-      id: 't10', no: 'RW20260115010', title: '医保结算数据文件分包压缩配置', type: '服务封装',
-      source: 'DEMAND', sourceId: 'd01', sourceNo: 'XQ20260112001',
+      id: 't10', no: 'RW20260819010', title: '医保结算数据文件分包压缩配置', type: '服务封装',
+      source: 'DEMAND', sourceId: 'd01', sourceNo: 'XQ20260816001',
       dept: '数据生产中心 · 加工组', assignee: '刘涛', priority: 'P2',
       planStart: DD(-9), planEnd: DD(-6), progress: 100, status: 'DONE', verifyResult: '通过',
       content: '为医保结算增量文件服务配置分包压缩与 SFTP 下发参数。',
@@ -1488,21 +1644,21 @@ function buildTasks(): any[] {
       relatedProblemIds: [],
       timeline: [{ at: D(-9, 10, 0), actor: '王思远', action: '派发任务' }, { at: D(-6, 16, 0), actor: '赵敏', action: '验证通过' }]
     },
-    {
-      id: 't11', no: 'RW20260127011', title: '传染病推送频率调整实施（变更实施）', type: '数据加工',
-      source: 'MANUAL', sourceId: 'c05', sourceNo: 'BG20260127005',
+    withLive(() => ({
+      id: 't11', no: liveNo('RW20260831011'), title: '传染病推送频率调整实施（变更实施）', type: '数据加工',
+      source: 'MANUAL', sourceId: 'c05', sourceNo: liveNo('BG20260831005'),
       dept: '数据生产中心 · 加工组', assignee: '刘涛', priority: 'P1',
       planStart: DD(3), planEnd: DD(3), progress: 0, status: 'PENDING_DISPATCH',
-      content: '按变更单 BG20260127005 调整传染病报告实时推送频率至 1 分钟，并完成容量评估。',
+      content: '按变更单 ' + liveNo('BG20260831005') + ' 调整传染病报告实时推送频率至 1 分钟，并完成容量评估。',
       deliverable: 'Flink 作业参数调整 + 容量评估报告',
       resources: ['r010'],
       milestones: [{ name: '容量评估', planDate: DD(2) }, { name: '参数调整', planDate: DD(3) }],
       relatedProblemIds: [],
       timeline: [{ at: D(0, 9, 0), actor: '郑晓', action: '创建任务单', comment: '待派发至生产部门' }]
-    },
+    })),
     {
-      id: 't12', no: 'RW20260120012', title: '药品字典贯标验证（退回重做）', type: '数据加工',
-      source: 'DEMAND', sourceId: 'd02', sourceNo: 'XQ20260116002',
+      id: 't12', no: 'RW20260824012', title: '药品字典贯标验证（退回重做）', type: '数据加工',
+      source: 'DEMAND', sourceId: 'd02', sourceNo: liveNo('XQ20260820002'),
       dept: '数据生产中心 · 加工组', assignee: '何静', priority: 'P3',
       planStart: DD(-6), planEnd: DD(-4), progress: 40, status: 'REJECTED', verifyResult: '不通过',
       rejectReason: '贯标结果中 186 条药品的名称与批准文号不匹配，需核对原始数据后重新贯标。',
@@ -1521,19 +1677,19 @@ function buildTasks(): any[] {
 
 function buildSubscriptions(): any[] {
   return [
-    {
-      id: 'sb01', no: 'DY20260114001', demandNo: 'XQ20260112001', kind: 'API', serviceId: 'sv03', appId: 'app01', tenantId: 't01',
+    withLive(() => ({
+      id: 'sb01', no: liveNo('DY20260818001'), demandNo: 'XQ20260816001', kind: 'API', serviceId: 'sv03', appId: 'app01', tenantId: 't01',
       apiConf: { period: '12 个月', estCalls: 50000 },
       approveStatus: 'APPROVED', submittedAt: D(-9, 15, 0), approvedAt: D(-9, 16, 0), approver: '张建国',
       channelAuth: { useScope: ['市医疗保障局', '医保基金监管分析平台'], visibleScope: ['市医疗保障局'] },
-      secret: { appKey: 'AK20260114EI8X2M', appSecret: 'SK******************7f3c', issuedAt: D(-9, 16, 0) },
+      secret: { appKey: 'AK20260818EI8X2M', appSecret: 'SK******************7f3c', issuedAt: D(-9, 16, 0) },
       pushLogs: [
         { at: D(-9, 17, 0), target: '医保基金监管分析平台', mode: '授权', transport: '库表', rows: 0, status: '成功', note: 'API 授权生效' },
         { at: D(-1, 2, 0), target: '医保基金监管分析平台', mode: '数据推送', transport: 'Flink', rows: 186420, status: '成功', note: '每日增量推送' }
       ]
-    },
-    {
-      id: 'sb02', no: 'DY20260122002', demandNo: 'XQ20260119003', kind: 'FILE', serviceId: 'sv08', appId: 'app06', tenantId: 't03',
+    })),
+    withLive(() => ({
+      id: 'sb02', no: liveNo('DY20260826002'), demandNo: 'XQ20260823003', kind: 'FILE', serviceId: 'sv08', appId: 'app06', tenantId: 't03',
       fileConf: { taskName: '医疗资源指标日度下发', filePath: '/data/metric/medical_resource/', fileName: 'metric_medical_resource_{yyyyMMdd}.csv', separator: '|', format: 'CSV(UTF-8 BOM)', zip: true, fields: ['metric_code', 'metric_name', 'stat_period', 'metric_value', 'district'], rule: '按 stat_date = T-1 全量取数', schedule: '每日 03:00' },
       approveStatus: 'APPROVED', submittedAt: D(-2, 9, 0), approvedAt: D(-2, 10, 0), approver: '孙立',
       channelAuth: { useScope: ['市卫生健康委员会', '三医一张图可视化'], visibleScope: ['市卫生健康委员会'] },
@@ -1542,60 +1698,60 @@ function buildSubscriptions(): any[] {
         { at: D(-1, 3, 0), target: '三医一张图可视化', mode: '数据推送', transport: '库表', rows: 86400, status: '成功', note: '全量下发' },
         { at: D(0, 3, 0), target: '三医一张图可视化', mode: '数据推送', transport: '库表', rows: 86400, status: '失败', note: '目标路径磁盘空间不足，已触发预警并安排补推' }
       ]
-    },
-    {
-      id: 'sb03', no: 'DY20260117003', demandNo: 'XQ20260112001', kind: 'API', serviceId: 'sv04', appId: 'app02', tenantId: 't01',
+    })),
+    withLive(() => ({
+      id: 'sb03', no: liveNo('DY20260821003'), demandNo: 'XQ20260816001', kind: 'API', serviceId: 'sv04', appId: 'app02', tenantId: 't01',
       apiConf: { period: '12 个月', estCalls: 30000 },
       approveStatus: 'APPROVED', submittedAt: D(-6, 13, 0), approvedAt: D(-6, 14, 0), approver: '张建国',
       channelAuth: { useScope: ['市医疗保障局', '医保参保画像应用'], visibleScope: ['市医疗保障局'] },
-      secret: { appKey: 'AK20260117QW3N9K', appSecret: 'SK******************2b81', issuedAt: D(-6, 14, 0), reissued: false },
+      secret: { appKey: 'AK20260821QW3N9K', appSecret: 'SK******************2b81', issuedAt: D(-6, 14, 0), reissued: false },
       pushLogs: [{ at: D(-6, 15, 0), target: '医保参保画像应用', mode: '授权', transport: '库表', rows: 0, status: '成功' }]
-    },
-    {
-      id: 'sb04', no: 'DY20260126004', demandNo: 'XQ20260121004', kind: 'REALTIME', serviceId: 'sv11', appId: 'app08', tenantId: 't04',
+    })),
+    withLive(() => ({
+      id: 'sb04', no: liveNo('DY20260830004'), demandNo: liveNo('XQ20260825004'), kind: 'REALTIME', serviceId: 'sv11', appId: 'app08', tenantId: 't04',
       rtConf: { mode: '推送', cluster: 'kafka-prod-03:9092', auth: 'SASL/SCRAM-SHA-256', authType: '密钥认证' },
       approveStatus: 'PENDING', submittedAt: D(-1, 16, 0),
       channelAuth: null, pushLogs: []
-    },
-    {
-      id: 'sb05', no: 'DY20260125005', demandNo: 'XQ20260118005', kind: 'FILE', serviceId: 'sv09', appId: 'app03', tenantId: 't01',
+    })),
+    withLive(() => ({
+      id: 'sb05', no: liveNo('DY20260829005'), demandNo: liveNo('XQ20260822005'), kind: 'FILE', serviceId: 'sv09', appId: 'app03', tenantId: 't01',
       fileConf: { taskName: '医保结算增量下发', filePath: '/sftp/mi/settlement/', fileName: 'mi_settlement_incr_{yyyyMMdd}.csv.gz', separator: '|', format: 'CSV(GBK)', zip: true, fields: ['settle_no', 'insured_id', 'settle_date', 'total_fee', 'fund_pay'], rule: '按 settle_date = T-1 增量取数', schedule: '每日 04:00' },
       approveStatus: 'PENDING', submittedAt: D(-2, 10, 0),
       channelAuth: null, pushLogs: []
-    },
-    {
-      id: 'sb06', no: 'DY20260120006', demandNo: 'XQ20260119003', kind: 'API', serviceId: 'sv01', appId: 'app07', tenantId: 't03',
+    })),
+    withLive(() => ({
+      id: 'sb06', no: liveNo('DY20260824006'), demandNo: 'XQ20260823003', kind: 'API', serviceId: 'sv01', appId: 'app07', tenantId: 't03',
       apiConf: { period: '长期', estCalls: 20000 },
       approveStatus: 'APPROVED', submittedAt: D(-3, 9, 0), approvedAt: D(-3, 10, 0), approver: '孙立',
       channelAuth: { useScope: ['市卫生健康委员会'], visibleScope: ['市卫生健康委员会', '市医疗保障局', '市药品监督管理局'] },
-      secret: { appKey: 'AK20260120ZX7P4L', appSecret: 'SK******************9c15', issuedAt: D(-3, 10, 0) },
+      secret: { appKey: 'AK20260824ZX7P4L', appSecret: 'SK******************9c15', issuedAt: D(-3, 10, 0) },
       pushLogs: [{ at: D(-3, 11, 0), target: '医疗资源专题分析', mode: '授权', transport: '库表', rows: 0, status: '成功' }]
-    },
+    })),
     {
-      id: 'sb07', no: 'DY20260108007', demandNo: 'XQ20260112001', kind: 'REALTIME', serviceId: 'sv10', appId: 'app06', tenantId: 't03',
+      id: 'sb07', no: 'DY20260812007', demandNo: 'XQ20260816001', kind: 'REALTIME', serviceId: 'sv10', appId: 'app06', tenantId: 't03',
       rtConf: { mode: '消费', cluster: 'kafka-prod-03:9092', auth: 'SASL/SCRAM-SHA-256', authType: '密钥认证' },
       approveStatus: 'UNSUBSCRIBED', submittedAt: D(-19, 14, 0), approvedAt: D(-18, 9, 0), approver: '张建国',
       unsubscribedAt: D(-12, 10, 0),
       channelAuth: { useScope: ['市卫生健康委员会'], visibleScope: ['市卫生健康委员会'] },
-      secret: { appKey: 'AK20260108MM2R6T', appSecret: 'SK******************4d72', issuedAt: D(-18, 9, 0), reissued: true },
+      secret: { appKey: 'AK20260812MM2R6T', appSecret: 'SK******************4d72', issuedAt: D(-18, 9, 0), reissued: true },
       pushLogs: [{ at: D(-17, 2, 0), target: '三医一张图可视化', mode: '数据推送', transport: 'Flink', rows: 426800, status: '成功' }]
     },
-    {
-      id: 'sb08', no: 'DY20260127008', demandNo: 'XQ20260122013', kind: 'API', serviceId: 'sv02', appId: 'app06', tenantId: 't03',
+    withLive(() => ({
+      id: 'sb08', no: liveNo('DY20260831008'), demandNo: liveNo('XQ20260826013'), kind: 'API', serviceId: 'sv02', appId: 'app06', tenantId: 't03',
       apiConf: { period: '长期', estCalls: 100000 },
       approveStatus: 'PENDING', submittedAt: D(0, 10, 0),
       channelAuth: null, pushLogs: []
-    },
-    {
-      id: 'sb09', no: 'DY20260121009', demandNo: 'XQ20260118005', kind: 'API', serviceId: 'sv05', appId: 'app04', tenantId: 't02',
+    })),
+    withLive(() => ({
+      id: 'sb09', no: liveNo('DY20260825009'), demandNo: liveNo('XQ20260822005'), kind: 'API', serviceId: 'sv05', appId: 'app04', tenantId: 't02',
       apiConf: { period: '24 个月', estCalls: 8000 },
       approveStatus: 'APPROVED', submittedAt: D(-4, 15, 0), approvedAt: D(-4, 16, 0), approver: '张建国',
       channelAuth: { useScope: ['市药品监督管理局'], visibleScope: ['市药品监督管理局'] },
-      secret: { appKey: 'AK20260121HH5V8D', appSecret: 'SK******************6a29', issuedAt: D(-4, 16, 0) },
+      secret: { appKey: 'AK20260825HH5V8D', appSecret: 'SK******************6a29', issuedAt: D(-4, 16, 0) },
       pushLogs: [{ at: D(-4, 17, 0), target: '药品不良反应监测', mode: '授权', transport: '库表', rows: 0, status: '成功' }]
-    },
+    })),
     {
-      id: 'sb10', no: 'DY20260110010', demandNo: 'XQ20260112001', kind: 'API', serviceId: 'sv06', appId: 'app01', tenantId: 't01',
+      id: 'sb10', no: 'DY20260814010', demandNo: 'XQ20260816001', kind: 'API', serviceId: 'sv06', appId: 'app01', tenantId: 't01',
       apiConf: { period: '6 个月', estCalls: 2000 },
       approveStatus: 'REJECTED', submittedAt: D(-17, 11, 0), rejectedAt: D(-16, 10, 0), rejectReason: '该服务因安全评估已停用，暂不接受新的订阅申请。',
       channelAuth: null, pushLogs: []
@@ -1605,45 +1761,45 @@ function buildSubscriptions(): any[] {
 
 function buildTenantRegs(): any[] {
   return [
-    { id: 'tn01', no: 'ZH20260120001', type: '企业', name: '市疾控中心监测租户', fields: { 公司类型: '事业单位', 租户性质: '数据使用方', 公司名称: '市疾病预防控制中心', 营业编码: '12110000********XW', 所属区域: '北京市', 详细地址: '北京市东城区**街**号', 职位: '信息科科长', 公司文件: '事业单位法人证书.pdf', 联系人: '郑晓', 手机号: '138****1010', 邮箱: 'zhengx@cdc.beijing.gov.cn' }, status: 'APPROVED', reviewer: '赵敏', reviewedAt: D(-150, 11, 0), reviewComment: '资质材料齐全，同意开通' },
-    { id: 'tn02', no: 'ZH20260123002', type: '企业', name: '市应急管理局指挥租户', fields: { 公司类型: '机关单位', 租户性质: '数据使用方', 公司名称: '市应急管理局', 营业编码: '11110000********JT', 所属区域: '北京市', 详细地址: '北京市西城区**大街**号', 职位: '应急指挥专员', 公司文件: '单位介绍信.pdf', 联系人: '黄伟', 手机号: '138****1011', 邮箱: 'huangw@yjgl.beijing.gov.cn' }, status: 'APPROVED', reviewer: '赵敏', reviewedAt: D(-90, 16, 0), reviewComment: '同意开通，限定应急场景使用' },
-    { id: 'tn03', no: 'ZH20260126003', type: '个人', name: '个人开发者账号申请（李慧敏）', fields: { 姓名: '李慧敏', 手机号: '138****1001', 身份证: '1101**********1001', 邮箱: 'lihm@ybj.beijing.gov.cn', 用户名: 'lihm_ybj', 申请说明: '因医保基金监管分析平台联调需要，申请个人测试账号' }, status: 'PENDING', submittedAt: D(-1, 10, 0) },
-    { id: 'tn04', no: 'ZH20260127004', type: '企业', name: '某医疗科技有限公司租户申请', fields: { 公司类型: '有限责任公司', 租户性质: '数据开发利用方', 公司名称: '北京**医疗科技有限公司', 营业编码: '91110108MA********', 所属区域: '北京市海淀区', 详细地址: '北京市海淀区**路**号**层', 职位: '数据总监', 公司文件: '营业执照.pdf、数据安全承诺书.pdf', 联系人: '**', 手机号: '139****2233', 邮箱: 'contact@medtech-partner.cn' }, status: 'PENDING', submittedAt: D(0, 9, 0) },
-    { id: 'tn05', no: 'ZH20260118005', type: '企业', name: '某健康管理公司租户申请', fields: { 公司类型: '有限责任公司', 租户性质: '数据开发利用方', 公司名称: '北京**健康管理有限公司', 营业编码: '91110105MA********', 所属区域: '北京市朝阳区', 详细地址: '北京市朝阳区**路**号', 职位: '运营负责人', 公司文件: '营业执照.pdf', 联系人: '**', 手机号: '137****4455', 邮箱: 'ops@health-partner.cn' }, status: 'REJECTED', reviewer: '赵敏', reviewedAt: D(-40, 14, 0), reviewComment: '申请能力类型与业务场景不匹配，且未提供数据安全承诺书，请补充材料后重新提交。' }
+    { id: 'tn01', no: 'ZH20260824001', type: '企业', name: '市疾控中心监测租户', fields: { 公司类型: '事业单位', 租户性质: '数据使用方', 公司名称: '市疾病预防控制中心', 营业编码: '12110000********XW', 所属区域: '北京市', 详细地址: '北京市东城区**街**号', 职位: '信息科科长', 公司文件: '事业单位法人证书.pdf', 联系人: '郑晓', 手机号: '138****1010', 邮箱: 'zhengx@cdc.beijing.gov.cn' }, status: 'APPROVED', reviewer: '赵敏', reviewedAt: D(-150, 11, 0), reviewComment: '资质材料齐全，同意开通' },
+    { id: 'tn02', no: 'ZH20260827002', type: '企业', name: '市应急管理局指挥租户', fields: { 公司类型: '机关单位', 租户性质: '数据使用方', 公司名称: '市应急管理局', 营业编码: '11110000********JT', 所属区域: '北京市', 详细地址: '北京市西城区**大街**号', 职位: '应急指挥专员', 公司文件: '单位介绍信.pdf', 联系人: '黄伟', 手机号: '138****1011', 邮箱: 'huangw@yjgl.beijing.gov.cn' }, status: 'APPROVED', reviewer: '赵敏', reviewedAt: D(-90, 16, 0), reviewComment: '同意开通，限定应急场景使用' },
+    withLive(() => ({ id: 'tn03', no: liveNo('ZH20260830003'), type: '个人', name: '个人开发者账号申请（李慧敏）', fields: { 姓名: '李慧敏', 手机号: '138****1001', 身份证: '1101**********1001', 邮箱: 'lihm@ybj.beijing.gov.cn', 用户名: 'lihm_ybj', 申请说明: '因医保基金监管分析平台联调需要，申请个人测试账号' }, status: 'PENDING', submittedAt: D(-1, 10, 0) })),
+    withLive(() => ({ id: 'tn04', no: liveNo('ZH20260831004'), type: '企业', name: '某医疗科技有限公司租户申请', fields: { 公司类型: '有限责任公司', 租户性质: '数据开发利用方', 公司名称: '北京**医疗科技有限公司', 营业编码: '91110108MA********', 所属区域: '北京市海淀区', 详细地址: '北京市海淀区**路**号**层', 职位: '数据总监', 公司文件: '营业执照.pdf、数据安全承诺书.pdf', 联系人: '**', 手机号: '139****2233', 邮箱: 'contact@medtech-partner.cn' }, status: 'PENDING', submittedAt: D(0, 9, 0) })),
+    { id: 'tn05', no: 'ZH20260822005', type: '企业', name: '某健康管理公司租户申请', fields: { 公司类型: '有限责任公司', 租户性质: '数据开发利用方', 公司名称: '北京**健康管理有限公司', 营业编码: '91110105MA********', 所属区域: '北京市朝阳区', 详细地址: '北京市朝阳区**路**号', 职位: '运营负责人', 公司文件: '营业执照.pdf', 联系人: '**', 手机号: '137****4455', 邮箱: 'ops@health-partner.cn' }, status: 'REJECTED', reviewer: '赵敏', reviewedAt: D(-40, 14, 0), reviewComment: '申请能力类型与业务场景不匹配，且未提供数据安全承诺书，请补充材料后重新提交。' }
   ];
 }
 
 function buildCapabilityApplies(): any[] {
   return [
-    { id: 'ca01', no: 'NL20260120001', applicant: '郑晓', email: 'zhengx@cdc.beijing.gov.cn', phone: '13800001010', applyType: '计算能力', storage: '2 TB', cpu: '64 核', memory: '256 GB', tenantId: 't04', status: 'APPROVED', submittedAt: D(-20, 10, 0), reviewedAt: D(-19, 9, 0), reviewer: '赵敏' },
-    { id: 'ca02', no: 'NL20260124002', applicant: '黄伟', email: 'huangw@yjgl.beijing.gov.cn', phone: '13800001011', applyType: '数据服务能力', storage: '500 GB', cpu: '16 核', memory: '64 GB', tenantId: 't05', status: 'APPROVED', submittedAt: D(-4, 14, 0), reviewedAt: D(-3, 10, 0), reviewer: '赵敏' },
-    { id: 'ca03', no: 'NL20260127003', applicant: '李慧敏', email: 'lihm@ybj.beijing.gov.cn', phone: '13800001001', applyType: '数据库能力', storage: '1 TB', cpu: '32 核', memory: '128 GB', tenantId: 't01', status: 'PENDING', submittedAt: D(-1, 15, 0) },
-    { id: 'ca04', no: 'NL20260127004', applicant: '马超', email: 'mach@pku3h.org.cn', phone: '13800001015', applyType: '应用能力', storage: '200 GB', cpu: '8 核', memory: '32 GB', tenantId: 't03', status: 'PENDING', submittedAt: D(0, 10, 0) }
+    { id: 'ca01', no: 'NL20260824001', applicant: '郑晓', email: 'zhengx@cdc.beijing.gov.cn', phone: '13800001010', applyType: '计算能力', storage: '2 TB', cpu: '64 核', memory: '256 GB', tenantId: 't04', status: 'APPROVED', submittedAt: D(-20, 10, 0), reviewedAt: D(-19, 9, 0), reviewer: '赵敏' },
+    { id: 'ca02', no: 'NL20260828002', applicant: '黄伟', email: 'huangw@yjgl.beijing.gov.cn', phone: '13800001011', applyType: '数据服务能力', storage: '500 GB', cpu: '16 核', memory: '64 GB', tenantId: 't05', status: 'APPROVED', submittedAt: D(-4, 14, 0), reviewedAt: D(-3, 10, 0), reviewer: '赵敏' },
+    withLive(() => ({ id: 'ca03', no: liveNo('NL20260831003'), applicant: '李慧敏', email: 'lihm@ybj.beijing.gov.cn', phone: '13800001001', applyType: '数据库能力', storage: '1 TB', cpu: '32 核', memory: '128 GB', tenantId: 't01', status: 'PENDING', submittedAt: D(-1, 15, 0) })),
+    withLive(() => ({ id: 'ca04', no: liveNo('NL20260831004'), applicant: '马超', email: 'mach@pku3h.org.cn', phone: '13800001015', applyType: '应用能力', storage: '200 GB', cpu: '8 核', memory: '32 GB', tenantId: 't03', status: 'PENDING', submittedAt: D(0, 10, 0) }))
   ];
 }
 
 function buildSecurityApprovals(): any[] {
   return [
     {
-      id: 'sa01', demandId: 'd04', demandNo: 'XQ20260121004', cate: '临时授权工单', createdAt: D(-4, 15, 0),
+      id: 'sa01', demandId: 'd04', demandNo: liveNo('XQ20260825004'), cate: '临时授权工单', createdAt: D(-4, 15, 0),
       levels: [
         { level: 1, approver: '周雅静', channel: '系统审批', status: '通过', comment: '公共卫生监测场景，同意按 L3 掩码授权', at: D(-4, 15, 0) },
-        { level: 2, approver: '孙立', channel: '邮件审批', status: '通过', comment: '邮件回复同意（2026-01-23 16:12）', at: D(-4, 16, 0) }
+        { level: 2, approver: '孙立', channel: '邮件审批', status: '通过', comment: '邮件回复同意（2026-08-27 16:00）', at: D(-4, 16, 0) }
       ]
     },
     {
-      id: 'sa02', demandId: 'd01', demandNo: 'XQ20260112001', cate: '临时授权工单', createdAt: D(-13, 9, 0),
+      id: 'sa02', demandId: 'd01', demandNo: 'XQ20260816001', cate: '临时授权工单', createdAt: D(-13, 9, 0),
       levels: [
         { level: 1, approver: '周雅静', channel: '系统审批', status: '通过', comment: '监管场景必要，同意按 L3 掩码授权，限定市医保局使用', at: D(-13, 10, 0) }
       ]
     },
-    {
-      id: 'sa03', demandId: 'd07', demandNo: 'XQ20260125007', cate: '临时授权工单', createdAt: D(-1, 15, 0),
+    withLive(() => ({
+      id: 'sa03', demandId: 'd07', demandNo: liveNo('XQ20260829007'), cate: '临时授权工单', createdAt: D(-1, 15, 0),
       levels: [
         { level: 1, approver: '周雅静', channel: '系统审批', status: '待审批' },
         { level: 2, approver: '孙立', channel: '邮件审批', status: '待审批' }
       ]
-    }
+    }))
   ];
 }
 
@@ -1651,7 +1807,7 @@ function buildSecurityApprovals(): any[] {
 function buildIncidents(): any[] {
   const base = [
     {
-      id: 'i01', no: 'SJ20260125001', title: '【接口异常】医疗机构信息查询服务返回 403', description: '医保基金监管分析平台调用医疗机构信息查询服务时返回 403 Forbidden，请求参数正常，昨日可正常调用。',
+      id: 'i01', no: 'SJ20260829001', title: '【接口异常】医疗机构信息查询服务返回 403', description: '医保基金监管分析平台调用医疗机构信息查询服务时返回 403 Forbidden，请求参数正常，昨日可正常调用。',
       source: '微信报障', categoryId: 'ic01', categoryName: '数据服务接口异常',
       severity: '高', impact: '部分功能受影响', urgency: '紧急', priority: 'P1',
       ciIds: ['ci07'], status: 'RESOLVED', handler: '徐鹏', handlerGroup: '运维中心 · 一线支持组',
@@ -1665,8 +1821,8 @@ function buildIncidents(): any[] {
         { at: D(-1, 11, 0), actor: '徐鹏', action: '解决', comment: '原因为密钥更换后调用方未同步，已协助更新 appSecret 并验证通过' }
       ]
     },
-    {
-      id: 'i02', no: 'SJ20260125002', title: '【数据延迟】门急诊就诊记录未按时更新', description: '门急诊就诊明细查询服务返回的最近数据日期停留在 2026-01-24，T+1 数据未按时更新，影响基金监管分析。',
+    withLive(() => ({
+      id: 'i02', no: liveNo('SJ20260829002'), title: '【数据延迟】门急诊就诊记录未按时更新', description: '门急诊就诊明细查询服务返回的最近数据日期停留在 ' + DD(-1) + '，T+1 数据未按时更新，影响基金监管分析。',
       source: '服务台申报', categoryId: 'ic02', categoryName: '数据更新延迟',
       severity: '严重', impact: '严重影响业务', urgency: '紧急', priority: 'P0',
       ciIds: ['ci05', 'ci08'], status: 'ESCALATED', handler: '陈志刚', handlerGroup: '运维中心 · 二线支持组',
@@ -1677,13 +1833,13 @@ function buildIncidents(): any[] {
         { at: D(-2, 8, 0), actor: '系统', action: '按分类自动分派至数据生产中心 · 加工组' },
         { at: D(-2, 9, 0), actor: '刘涛', action: '初步排查', comment: '作业调度正常，疑似上游采集批次缺失' },
         { at: D(-1, 11, 0), actor: '徐鹏', action: '升级', comment: '一线无法定位，升级至二线支持组' },
-        { at: D(-1, 14, 0), actor: '陈志刚', action: '关联重复事件', comment: '与 SJ20260124003 为同类问题，已关联' },
-        { at: D(-1, 15, 0), actor: '陈志刚', action: '开出问题单', comment: '生成问题单 WT2026010001 做根因分析' },
+        { at: D(-1, 14, 0), actor: '陈志刚', action: '关联重复事件', comment: '与 SJ20260828003 为同类问题，已关联' },
+        { at: D(-1, 15, 0), actor: '陈志刚', action: '开出问题单', comment: '生成问题单 ' + liveNo('WT2026080001') + ' 做根因分析' },
         { at: D(-1, 16, 0), actor: '陈志刚', action: '事件广播', comment: '已向全部订阅方通告事件进展' }
       ]
-    },
-    {
-      id: 'i03', no: 'SJ20260126003', title: '【功能异常】需求单详情页流转状态未刷新', description: '需求单审批通过后，详情页顶部流转状态条仍显示「待审批」，刷新页面后恢复正常。',
+    })),
+    withLive(() => ({
+      id: 'i03', no: liveNo('SJ20260830003'), title: '【功能异常】需求单详情页流转状态未刷新', description: '需求单审批通过后，详情页顶部流转状态条仍显示「待审批」，刷新页面后恢复正常。',
       source: '客户自助', categoryId: 'ic04', categoryName: '平台功能不可用',
       severity: '中', impact: '轻微影响', urgency: '一般', priority: 'P2',
       ciIds: [], status: 'PROCESSING', handler: '徐鹏', handlerGroup: '运维中心 · 一线支持组',
@@ -1694,9 +1850,9 @@ function buildIncidents(): any[] {
         { at: D(-1, 15, 0), actor: '系统', action: '按分类自动分派至运维中心 · 一线支持组' },
         { at: D(0, 9, 0), actor: '徐鹏', action: '开始处理', comment: '初步判断为前端状态缓存问题，正在复现' }
       ]
-    },
+    })),
     {
-      id: 'i04', no: 'SJ20260124003', title: '【数据延迟】门急诊就诊记录更新延迟（同类）', description: '门急诊就诊记录更新延迟，与 SJ20260125002 表现一致。',
+      id: 'i04', no: 'SJ20260828003', title: '【数据延迟】门急诊就诊记录更新延迟（同类）', description: '门急诊就诊记录更新延迟，与 ' + liveNo('SJ20260829002') + ' 表现一致。',
       source: '服务台申报', categoryId: 'ic02', categoryName: '数据更新延迟',
       severity: '高', impact: '部分功能受影响', urgency: '紧急', priority: 'P1',
       ciIds: ['ci05'], status: 'CLOSED', handler: '陈志刚', handlerGroup: '运维中心 · 二线支持组',
@@ -1704,11 +1860,11 @@ function buildIncidents(): any[] {
       relatedIncidentIds: ['i02'], problemId: null, changeId: null, broadcastIds: [], knowledgeRefs: ['k02'],
       timeline: [
         { at: D(-3, 9, 0), actor: '王思远', action: '服务台申报事件' },
-        { at: D(-2, 17, 0), actor: '陈志刚', action: '解决并关闭', comment: '临时手工补采后恢复，已关联至 SJ20260125002 统一处理' }
+        { at: D(-2, 17, 0), actor: '陈志刚', action: '解决并关闭', comment: '临时手工补采后恢复，已关联至 ' + liveNo('SJ20260829002') + ' 统一处理' }
       ]
     },
-    {
-      id: 'i05', no: 'SJ20260126004', title: '【性能问题】医保结算信息查询服务响应超过 10 秒', description: '查询 2025 年全年结算数据时响应时间超过 10 秒，出现超时。',
+    withLive(() => ({
+      id: 'i05', no: liveNo('SJ20260830004'), title: '【性能问题】医保结算信息查询服务响应超过 10 秒', description: '查询 2025 年全年结算数据时响应时间超过 10 秒，出现超时。',
       source: '服务台申报', categoryId: 'ic05', categoryName: '性能问题',
       severity: '中', impact: '部分功能受影响', urgency: '较急', priority: 'P2',
       ciIds: ['ci09', 'ci02'], status: 'DISPATCHED', handler: '陈志刚', handlerGroup: '运维中心 · 二线支持组',
@@ -1718,9 +1874,9 @@ function buildIncidents(): any[] {
         { at: D(0, 8, 0), actor: '李慧敏', action: '服务台申报事件' },
         { at: D(0, 8, 0), actor: '系统', action: '按分类自动分派至运维中心 · 二线支持组' }
       ]
-    },
-    {
-      id: 'i06', no: 'SJ20260127005', title: '【数据安全】疑似越权访问 L4 资源', description: '安全网关告警：某应用尝试访问医保参保人员信息（L4）中未授权字段。',
+    })),
+    withLive(() => ({
+      id: 'i06', no: liveNo('SJ20260831005'), title: '【数据安全】疑似越权访问 L4 资源', description: '安全网关告警：某应用尝试访问医保参保人员信息（L4）中未授权字段。',
       source: '服务台申报', categoryId: 'ic07', categoryName: '数据安全事件',
       severity: '严重', impact: '严重影响业务', urgency: '紧急', priority: 'P0',
       ciIds: ['ci06', 'ci15'], status: 'NEW', handler: '—', handlerGroup: '安全与合规管理处',
@@ -1729,16 +1885,16 @@ function buildIncidents(): any[] {
       timeline: [
         { at: D(0, 9, 0), actor: '安全网关', action: '自动创建事件', comment: '命中越权访问规则，涉及 L4 资源字段' }
       ]
-    },
-    {
-      id: 'i07', no: 'SJ20260127006', title: '【权限问题】新入职人员无法登录平台', description: '市药监局新入职人员账号已创建但无法登录，提示权限不足。',
+    })),
+    withLive(() => ({
+      id: 'i07', no: liveNo('SJ20260831006'), title: '【权限问题】新入职人员无法登录平台', description: '市药监局新入职人员账号已创建但无法登录，提示权限不足。',
       source: '邮件', categoryId: 'ic06', categoryName: '权限与账号问题',
       severity: '低', impact: '轻微影响', urgency: '一般', priority: 'P3',
       ciIds: [], status: 'NEW', handler: '—', handlerGroup: '平台运营中心',
       slaDueAt: D(1, 10, 0),
       relatedIncidentIds: [], problemId: null, changeId: null, broadcastIds: [], knowledgeRefs: ['k07'],
       timeline: [{ at: D(0, 8, 0), actor: '吴强', action: '通过邮件提交事件（服务台邮箱自动建单）' }]
-    }
+    }))
   ];
   /* 批量补充历史事件，用于统计图表 */
   const extra = [];
@@ -1762,7 +1918,7 @@ function buildIncidents(): any[] {
     const dayOff = -(3 + i);
     const cat = U_find(INCIDENT_CATEGORIES, catIds[t]);
     extra.push({
-      id: 'ix' + (i + 1), no: seq('SJ202601', 20 + i, 27 + dayOff > 0 ? 27 + dayOff : (27 + dayOff + 31)),
+      id: 'ix' + (i + 1), no: seq('SJ', 20 + i, Number(DD(dayOff).slice(8, 10))),
       title: titles[t], description: titles[t].replace(/^【[^】]+】/, '') + '，需要运维协助处理。',
       source: srcs[t], categoryId: catIds[t], categoryName: cat ? cat.name : '其他',
       severity: sevs[t], impact: imps[t], urgency: urg[t],
@@ -1780,6 +1936,7 @@ function buildIncidents(): any[] {
   }
   /* 近 7 天按小时分布的事件，用于按小时统计 */
   const hourlyExtra = [];
+  LIVE = true
   for (let hi = 0; hi < 24; hi++) {
     const c = [3, 1, 1, 0, 0, 1, 2, 6, 14, 22, 26, 18, 12, 16, 24, 28, 22, 16, 10, 8, 6, 5, 4, 3][hi];
     for (let k = 0; k < c; k++) {
@@ -1800,6 +1957,7 @@ function buildIncidents(): any[] {
       });
     }
   }
+  LIVE = false
   return (base as any[]).concat(extra, hourlyExtra)
 }
 function U_find<T extends { id: string }>(arr: T[], id: string): T | null {
@@ -1809,47 +1967,47 @@ function U_find<T extends { id: string }>(arr: T[], id: string): T | null {
 
 function buildProblems(): any[] {
   return [
-    {
-      id: 'p01', no: 'WT2026010001', title: '门急诊就诊记录批量延迟（根因：上游采集批次缺失）',
+    withLive(() => ({
+      id: 'p01', no: liveNo('WT2026080001'), title: '门急诊就诊记录批量延迟（根因：上游采集批次缺失）',
       source: 'INCIDENT', sourceIncidentIds: ['i02', 'i04'],
       severity: '严重', impact: '严重影响业务', urgency: '紧急', priority: 'P0',
       status: 'KNOWN_ERROR', handler: '陈志刚', dept: '运维中心 · 二线支持组',
-      rootCause: '上游 3 家医院的 LIS 系统在 01-23 夜间批量升级，导致当日采集批次未完整上报；现有调度未对批次完整性做校验，缺失后无告警，直接进入加工环节。',
-      knownError: { workaround: '发现延迟后，由数据生产中心手工触发补采并重跑加工作业，可在 4 小时内恢复数据可用性。', permanentFixPlan: '推进上游采集链路改造，新增批次完整性校验与缺失自动补采能力（由任务单 RW20260125009 承接）。', expireAt: DD(40) },
+      rootCause: '上游 3 家医院的 LIS 系统在 ' + DD(-3).slice(5) + ' 夜间批量升级，导致当日采集批次未完整上报；现有调度未对批次完整性做校验，缺失后无告警，直接进入加工环节。',
+      knownError: { workaround: '发现延迟后，由数据生产中心手工触发补采并重跑加工作业，可在 4 小时内恢复数据可用性。', permanentFixPlan: '推进上游采集链路改造，新增批次完整性校验与缺失自动补采能力（由任务单 ' + liveNo('RW20260829009') + ' 承接）。', expireAt: DD(40) },
       solution: '', preventive: '在上游系统变更（升级、割接）前，需通过变更管理流程提前报备并通知数据生产中心，避免批次缺失。',
       notifyChannels: ['邮件', '短信'],
       notifyLogs: [
-        { at: D(-1, 15, 0), to: '李慧敏（市医疗保障局）', channel: '邮件', content: '问题单 WT2026010001 已创建，根因分析中，预计 24 小时内给出结论。' },
-        { at: D(-1, 16, 0), to: '王思远（服务台）', channel: '短信', content: '【三医数据底座】问题 WT2026010001 已给出临时解决方案，请同步订阅方。' }
+        { at: D(-1, 15, 0), to: '李慧敏（市医疗保障局）', channel: '邮件', content: '问题单 ' + liveNo('WT2026080001') + ' 已创建，根因分析中，预计 24 小时内给出结论。' },
+        { at: D(-1, 16, 0), to: '王思远（服务台）', channel: '短信', content: '【三医数据底座】问题 ' + liveNo('WT2026080001') + ' 已给出临时解决方案，请同步订阅方。' }
       ],
       relatedChangeIds: [], relatedCiIds: ['ci05', 'ci03'], knowledgeId: 'k02',
       createdAt: D(-1, 15, 0), expectAt: DD(10),
       timeline: [
-        { at: D(-1, 15, 0), actor: '陈志刚', action: '由事件单 SJ20260125002 创建问题单' },
+        { at: D(-1, 15, 0), actor: '陈志刚', action: '由事件单 ' + liveNo('SJ20260829002') + ' 创建问题单' },
         { at: D(-1, 15, 0), actor: '陈志刚', action: '分派至运维中心 · 二线支持组' },
         { at: D(-1, 16, 0), actor: '陈志刚', action: '根因分析完成', comment: '根因：上游采集批次缺失，现有调度无批次完整性校验' },
         { at: D(-1, 16, 0), actor: '陈志刚', action: '转入已知错误流程', comment: '根治需上游改造，先提供临时解决方案' },
         { at: D(-1, 17, 0), actor: '陈志刚', action: '提交知识条目', comment: '已更新知识条目《数据更新延迟（T+1 未到数）处理规范》' },
-        { at: D(-1, 17, 0), actor: '陈志刚', action: '创建任务单', comment: '生成任务单 RW20260125009 承接根因整改' }
+        { at: D(-1, 17, 0), actor: '陈志刚', action: '创建任务单', comment: '生成任务单 ' + liveNo('RW20260829009') + ' 承接根因整改' }
       ]
-    },
-    {
-      id: 'p02', no: 'WT2026010002', title: '资源目录检索结果偶发为空（全文检索索引同步问题）',
+    })),
+    withLive(() => ({
+      id: 'p02', no: liveNo('WT2026080002'), title: '资源目录检索结果偶发为空（全文检索索引同步问题）',
       source: 'MANUAL', sourceIncidentIds: ['i03'],
       severity: '中', impact: '轻微影响', urgency: '一般', priority: 'P2',
       status: 'ANALYZING', handler: '陈志刚', dept: '运维中心 · 二线支持组',
       rootCause: '',
       notifyChannels: ['邮件'],
-      notifyLogs: [{ at: D(-1, 17, 0), to: '吴强（市药品监督管理局）', channel: '邮件', content: '问题单 WT2026010002 已受理，正在分析中。' }],
+      notifyLogs: [{ at: D(-1, 17, 0), to: '吴强（市药品监督管理局）', channel: '邮件', content: '问题单 ' + liveNo('WT2026080002') + ' 已受理，正在分析中。' }],
       relatedChangeIds: [], relatedCiIds: [], knowledgeId: null,
       createdAt: D(-1, 17, 0), expectAt: DD(6),
       timeline: [
         { at: D(-1, 17, 0), actor: '陈志刚', action: '手工创建问题单', comment: '同类反馈已出现 3 次，转为问题深入分析' },
         { at: D(0, 9, 0), actor: '陈志刚', action: '分析中', comment: '怀疑为全文检索索引与元数据同步存在时间差，正在验证' }
       ]
-    },
-    {
-      id: 'p03', no: 'WT2026010003', title: '实时推送服务在大批量场景下消息堆积',
+    })),
+    withLive(() => ({
+      id: 'p03', no: liveNo('WT2026080003'), title: '实时推送服务在大批量场景下消息堆积',
       source: 'MANUAL', sourceIncidentIds: [],
       severity: '高', impact: '部分功能受影响', urgency: '较急', priority: 'P1',
       status: 'DISPATCHED', handler: '陈志刚', dept: '运维中心 · 二线支持组',
@@ -1857,9 +2015,9 @@ function buildProblems(): any[] {
       notifyLogs: [], relatedChangeIds: [], relatedCiIds: ['ci16', 'ci11'], knowledgeId: null,
       createdAt: D(0, 8, 0), expectAt: DD(8),
       timeline: [{ at: D(0, 8, 0), actor: '陈志刚', action: '创建问题单并分派' }]
-    },
+    })),
     {
-      id: 'p04', no: 'WT2026010004', title: '药品字典贯标结果名称与批准文号不匹配',
+      id: 'p04', no: 'WT2026080004', title: '药品字典贯标结果名称与批准文号不匹配',
       source: 'MANUAL', sourceIncidentIds: [],
       severity: '中', impact: '部分功能受影响', urgency: '一般', priority: 'P2',
       status: 'RESOLVED', handler: '刘涛', dept: '数据生产中心 · 加工组',
@@ -1867,16 +2025,16 @@ function buildProblems(): any[] {
       solution: '按「编码 + 批准文号」组合键重新匹配，并对历史数据做一次全量校验；已重新贯标并通过验证。',
       preventive: '在贯标作业中增加唯一性校验规则，对编码复用情况输出异常清单并要求上游确认。',
       notifyChannels: ['邮件'],
-      notifyLogs: [{ at: D(-3, 16, 0), to: '吴强（市药品监督管理局）', channel: '邮件', content: '问题 WT2026010004 已解决，贯标结果已重新校验。' }],
+      notifyLogs: [{ at: D(-3, 16, 0), to: '吴强（市药品监督管理局）', channel: '邮件', content: '问题 WT2026080004 已解决，贯标结果已重新校验。' }],
       relatedChangeIds: [], relatedCiIds: [], knowledgeId: null,
       createdAt: D(-5, 10, 0), expectAt: DD(-1), resolvedAt: D(-3, 15, 0),
       timeline: [
-        { at: D(-5, 10, 0), actor: '刘涛', action: '创建问题单', comment: '任务单 RW20260120012 验证不通过后转入' },
+        { at: D(-5, 10, 0), actor: '刘涛', action: '创建问题单', comment: '任务单 RW20260824012 验证不通过后转入' },
         { at: D(-3, 15, 0), actor: '刘涛', action: '解决', comment: '按编码+批准文号组合键重新匹配并重新贯标' }
       ]
     },
     {
-      id: 'p05', no: 'WT2026010005', title: '数据服务网关偶发 502（连接池耗尽）',
+      id: 'p05', no: 'WT2026080005', title: '数据服务网关偶发 502（连接池耗尽）',
       source: 'INCIDENT', sourceIncidentIds: ['ix9'],
       severity: '高', impact: '部分功能受影响', urgency: '紧急', priority: 'P1',
       status: 'CLOSED', handler: '陈志刚', dept: '运维中心 · 二线支持组',
@@ -1892,8 +2050,8 @@ function buildProblems(): any[] {
         { at: D(-10, 10, 0), actor: '陈志刚', action: '关闭', comment: '观察 3 日无复现，问题关闭' }
       ]
     },
-    {
-      id: 'p06', no: 'WT2026010006', title: '慢病标签更新延迟（标签任务依赖未收敛）',
+    withLive(() => ({
+      id: 'p06', no: liveNo('WT2026080006'), title: '慢病标签更新延迟（标签任务依赖未收敛）',
       source: 'MANUAL', sourceIncidentIds: [],
       severity: '中', impact: '轻微影响', urgency: '一般', priority: 'P2',
       status: 'NEW', handler: '—', dept: '',
@@ -1901,17 +2059,17 @@ function buildProblems(): any[] {
       relatedChangeIds: [], relatedCiIds: [], knowledgeId: null,
       createdAt: D(0, 10, 0), expectAt: DD(7),
       timeline: [{ at: D(0, 10, 0), actor: '陈志刚', action: '手工创建问题单', comment: '待分派' }]
-    }
+    }))
   ];
 }
 
 function buildReleases(): any[] {
   return [
     {
-      id: 'rl01', no: 'FB20260122001', title: '数据服务管理工具 v1.4.2 版本发布',
+      id: 'rl01', no: 'FB20260826001', title: '数据服务管理工具 v1.4.2 版本发布',
       demandIds: ['d01', 'd03'], changeIds: ['c04'], changeContent: '① 门急诊就诊明细服务新增 settle_type 出参；② 医疗资源指标口径调整（每千人口床位数）；③ 需求单流转状态实时刷新修复。',
       testResult: '测试环境回归通过，12 项用例全部通过；性能压测 QPS 1200 无异常。',
-      releaseAt: D(-3, 22, 0) + '', downtime: '2026-01-24 22:00-23:00（预计 60 分钟）',
+      releaseAt: D(-3, 22, 0) + '', downtime: '2026-08-28 22:00-23:00（预计 60 分钟）',
       status: 'CLOSED', applicant: '赵敏', approver: '孙立', approvedAt: D(-5, 10, 0),
       packages: [
         { version: 'v1.4.2', archivedAt: D(-3, 22, 0), operator: '赵敏', remark: '本次发布包，含 3 个变更' },
@@ -1939,11 +2097,11 @@ function buildReleases(): any[] {
         { at: D(-1, 10, 0), actor: '孙立', action: '发布审计', comment: '审计通过，本次升级闭环' }
       ]
     },
-    {
-      id: 'rl02', no: 'FB20260125002', title: '实时推送链路优化版本发布',
+    withLive(() => ({
+      id: 'rl02', no: liveNo('FB20260829002'), title: '实时推送链路优化版本发布',
       demandIds: ['d04'], changeIds: [], changeContent: '① 传染病报告实时推送链路参数优化；② 脱敏组件性能优化；③ 推送失败自动重试机制。',
       testResult: '测试环境联调通过，推送时延由 8 秒降至 1.5 秒。',
-      releaseAt: D(1, 23, 0) + '', downtime: '2026-01-28 23:00-24:00（预计 60 分钟）',
+      releaseAt: D(1, 23, 0) + '', downtime: DD(1) + ' 23:00-24:00（预计 60 分钟）',
       status: 'VERIFYING', applicant: '赵敏', approver: '孙立', approvedAt: D(-1, 14, 0),
       packages: [{ version: 'v1.5.0', archivedAt: D(1, 23, 0), operator: '赵敏', remark: '本次发布包' }],
       verifyItems: [
@@ -1959,12 +2117,12 @@ function buildReleases(): any[] {
         { at: D(1, 23, 0), actor: '赵敏', action: '执行升级' },
         { at: D(2, 0, 0), actor: '陈志刚', action: '业务验证', comment: '部分验证项已完成，数据完整性验证待观察一个推送周期' }
       ]
-    },
+    })),
     {
-      id: 'rl03', no: 'FB20260118003', title: '资源目录检索优化版本发布（已回滚）',
+      id: 'rl03', no: 'FB20260822003', title: '资源目录检索优化版本发布（已回滚）',
       demandIds: [], changeIds: [], changeContent: '① 全文检索索引结构优化；② 资源目录排序功能增强。',
       testResult: '测试环境通过，但生产环境索引重建耗时超出预期。',
-      releaseAt: D(-9, 22, 0) + '', downtime: '2026-01-18 22:00-23:30',
+      releaseAt: D(-9, 22, 0) + '', downtime: '2026-08-22 22:00-23:30',
       status: 'ROLLED_BACK', applicant: '赵敏', approver: '孙立', approvedAt: D(-11, 15, 0),
       packages: [
         { version: 'v1.4.3', archivedAt: D(-9, 22, 0), operator: '赵敏', remark: '本次发布包（已回滚）' },
@@ -1985,11 +2143,11 @@ function buildReleases(): any[] {
         { at: D(-8, 10, 0), actor: '孙立', action: '发布审计', comment: '本次发布失败已回滚，需重新评估索引方案后再次申请' }
       ]
     },
-    {
-      id: 'rl04', no: 'FB20260127004', title: '数据需求管理模块功能增强版本发布',
+    withLive(() => ({
+      id: 'rl04', no: liveNo('FB20260831004'), title: '数据需求管理模块功能增强版本发布',
       demandIds: ['d12'], changeIds: ['c01', 'c02'], changeContent: '① 需求变更风险评估影响链路可视化增强；② 变更窗口支持业务事件日程叠加；③ 需求单批量审批。',
       testResult: '测试环境回归通过，15 项用例全部通过。',
-      releaseAt: D(3, 22, 0) + '', downtime: '2026-01-30 22:00-23:00（预计 60 分钟）',
+      releaseAt: D(3, 22, 0) + '', downtime: DD(3) + ' 22:00-23:00（预计 60 分钟）',
       status: 'APPROVED', applicant: '赵敏', approver: '孙立', approvedAt: D(0, 9, 0),
       packages: [{ version: 'v1.6.0', archivedAt: D(3, 22, 0), operator: '赵敏', remark: '本次发布包' }],
       verifyItems: [
@@ -2000,11 +2158,11 @@ function buildReleases(): any[] {
       ],
       timeline: [
         { at: D(-1, 11, 0), actor: '赵敏', action: '提交发布申请', comment: '由变更单 c01、c02 驱动' },
-        { at: D(0, 9, 0), actor: '孙立', action: '发布审批批复', comment: '同意在 01-30 22:00 窗口执行，注意避让变更 c01 实施窗口' }
+        { at: D(0, 9, 0), actor: '孙立', action: '发布审批批复', comment: '同意在 ' + DD(3).slice(5) + ' 22:00 窗口执行，注意避让变更 c01 实施窗口' }
       ]
-    },
-    {
-      id: 'rl05', no: 'FB20260126005', title: '数据分类分级规则库更新发布',
+    })),
+    withLive(() => ({
+      id: 'rl05', no: liveNo('FB20260830005'), title: '数据分类分级规则库更新发布',
       demandIds: [], changeIds: [], changeContent: '新增 12 条敏感数据识别规则，更新脱敏算法参数模板（含 SM4 加密参数）。',
       testResult: '规则库在测试环境验证通过，识别命中率提升 8%。',
       releaseAt: D(2, 21, 0) + '', downtime: '无（热更新）',
@@ -2016,12 +2174,12 @@ function buildReleases(): any[] {
         { name: '分类分级结果展示', result: '未执行' }
       ],
       timeline: [{ at: D(0, 10, 0), actor: '周雅静', action: '提交发布申请', comment: '等待测试情况确认' }]
-    },
+    })),
     {
-      id: 'rl06', no: 'FB20260110006', title: '能力开放门户租户管理增强发布',
+      id: 'rl06', no: 'FB20260814006', title: '能力开放门户租户管理增强发布',
       demandIds: [], changeIds: [], changeContent: '① 租户注册企业资质校验增强；② 能力申请存储/CUP/内存配额校验。',
       testResult: '测试环境通过。',
-      releaseAt: D(-16, 22, 0) + '', downtime: '2026-01-11 22:00-23:00',
+      releaseAt: D(-16, 22, 0) + '', downtime: '2026-08-15 22:00-23:00',
       status: 'CLOSED', applicant: '赵敏', approver: '孙立', approvedAt: D(-18, 10, 0),
       packages: [{ version: 'v1.3.9', archivedAt: D(-16, 22, 0), operator: '赵敏', remark: '本次发布包' }],
       verifyItems: [
@@ -2045,7 +2203,7 @@ function buildReleases(): any[] {
 function buildEvaluations(): any[] {
   return [
     {
-      id: 'ev01', no: 'PJ20260110001', demandId: 'd01', demandNo: 'XQ20260112001',
+      id: 'ev01', no: 'PJ20260814001', demandId: 'd01', demandNo: 'XQ20260816001',
       title: '对「门急诊就诊明细查询服务」的评价',
       evaluator: '李慧敏', evaluatorOrg: '市医疗保障局', score: 5, evaluatedAt: D(-8, 10, 0),
       content: '数据质量好，字段口径清晰，交付及时。接口文档说明详细，脱敏规则符合监管要求。建议后续支持按科室维度直接聚合查询。',
@@ -2053,17 +2211,17 @@ function buildEvaluations(): any[] {
       status: 'APPROVED', approvedAt: D(-7, 10, 0), approver: '张建国', visibleTo: 'BOTH',
       feedback: { id: 'fb01', user: '张建国', content: '感谢反馈。按科室维度聚合查询的需求已记录，将纳入下一版本需求池评估；如急需可在需求管理中单独提出。', at: D(-6, 15, 0), status: 'APPROVED', approvedAt: D(-6, 16, 0) }
     },
-    {
-      id: 'ev02', no: 'PJ20260115002', demandId: 'd03', demandNo: 'XQ20260119003',
+    withLive(() => ({
+      id: 'ev02', no: liveNo('PJ20260819002'), demandId: 'd03', demandNo: 'XQ20260823003',
       title: '对「医疗资源指标日度文件服务」的评价',
       evaluator: '张建国', evaluatorOrg: '市卫生健康委员会', score: 4, evaluatedAt: D(-2, 10, 0),
-      content: '指标口径准确，下发及时。但 01-27 的文件下发失败，希望改进任务失败后的自动补推能力。',
+      content: '指标口径准确，下发及时。但 ' + DD(-3).slice(5) + ' 的文件下发失败，希望改进任务失败后的自动补推能力。',
       dims: { 数据质量: 5, 交付及时性: 3, 服务态度: 4, 文档完备性: 4, 问题响应速度: 4 },
       status: 'PENDING_APPROVE', visibleTo: 'SUPPLIER',
       feedback: null
-    },
+    })),
     {
-      id: 'ev03', no: 'PJ20260120003', demandId: 'd02', demandNo: 'XQ20260116002',
+      id: 'ev03', no: 'PJ20260824003', demandId: 'd02', demandNo: liveNo('XQ20260820002'),
       title: '对「药品与器械字典贯标加工」的评价',
       evaluator: '吴强', evaluatorOrg: '市药品监督管理局', score: 3, evaluatedAt: D(-3, 10, 0),
       content: '字典贯标整体可用，但首次贯标结果存在名称与批准文号不匹配问题，经反馈后已重新贯标。希望加强贯标结果的自动校验。',
@@ -2072,7 +2230,7 @@ function buildEvaluations(): any[] {
       feedback: { id: 'fb02', user: '刘涛', content: '已定位为上游编码复用导致，现已按「编码+批准文号」组合键重新贯标并通过验证；贯标作业已增加唯一性校验规则，后续会输出异常清单。', at: D(-2, 16, 0), status: 'APPROVED', approvedAt: D(-1, 10, 0) }
     },
     {
-      id: 'ev04', no: 'PJ20260124004', demandId: 'd05', demandNo: 'XQ20260118005',
+      id: 'ev04', no: 'PJ20260828004', demandId: 'd05', demandNo: liveNo('XQ20260822005'),
       title: '对「医保结算数据文件服务」的评价',
       evaluator: '李慧敏', evaluatorOrg: '市医疗保障局', score: 3, evaluatedAt: D(-1, 10, 0),
       content: '文件格式变更为 GBK 后，我方解析脚本需要调整，建议变更前提前通知并保留过渡期。',
@@ -2081,23 +2239,23 @@ function buildEvaluations(): any[] {
       visibleTo: 'SUPPLIER', feedback: null
     },
     {
-      id: 'ev05', no: 'PJ20260126005', demandId: 'd14', demandNo: 'XQ20260120014',
+      id: 'ev05', no: 'PJ20260830005', demandId: 'd14', demandNo: 'XQ20260824014',
       title: '对「血液管理专题数据交付」的评价',
       evaluator: '张建国', evaluatorOrg: '市卫生健康委员会', score: 4, evaluatedAt: D(-1, 15, 0),
       content: '数据完整，交付及时，满足血液管理专题分析需要。',
       dims: { 数据质量: 4, 交付及时性: 5, 服务态度: 4, 文档完备性: 4, 问题响应速度: 4 },
       status: 'APPROVED', approvedAt: D(0, 9, 0), approver: '孙立', visibleTo: 'SUPPLIER', feedback: null
     },
-    {
-      id: 'ev06', no: 'PJ20260127006', demandId: 'd13', demandNo: 'XQ20260122013',
+    withLive(() => ({
+      id: 'ev06', no: liveNo('PJ20260831006'), demandId: 'd13', demandNo: liveNo('XQ20260826013'),
       title: '对「可视化指标 API」的评价',
       evaluator: '孙立', evaluatorOrg: '三医联动信息化工作领导小组办公室', score: 5, evaluatedAt: D(0, 10, 0),
       content: '接口封装规范，调用稳定，支撑了决策层可视化展示。',
       dims: { 数据质量: 5, 交付及时性: 4, 服务态度: 5, 文档完备性: 5, 问题响应速度: 5 },
       status: 'PENDING_APPROVE', visibleTo: 'BOTH', approvedAt: null, feedback: null
-    },
+    })),
     {
-      id: 'ev07', no: 'PJ20260125007', demandId: 'd14', demandNo: 'XQ20260120014',
+      id: 'ev07', no: 'PJ20260829007', demandId: 'd14', demandNo: 'XQ20260824014',
       title: '对「血液采集与供应数据」的评价（历史）',
       evaluator: '郑晓', evaluatorOrg: '市疾病预防控制中心', score: 4, evaluatedAt: D(-5, 14, 0),
       content: '数据可用于专题分析，更新频率符合要求。',
@@ -2106,55 +2264,55 @@ function buildEvaluations(): any[] {
       feedback: { id: 'fb03', user: '张建国', content: '感谢评价，文档完备性方面我们会补充字段说明与样例。', at: D(-4, 15, 0), status: 'APPROVED', approvedAt: D(-3, 9, 0) }
     },
     {
-      id: 'ev08', no: 'PJ20260112008', demandId: 'd01', demandNo: 'XQ20260112001',
+      id: 'ev08', no: 'PJ20260816008', demandId: 'd01', demandNo: 'XQ20260816001',
       title: '对「门急诊费用统计服务」的评价（历史）',
       evaluator: '黄伟', evaluatorOrg: '市应急管理局', score: 2, evaluatedAt: D(-20, 10, 0),
       content: '接口响应较慢，高峰期经常超时，希望优化性能。',
       dims: { 数据质量: 3, 交付及时性: 2, 服务态度: 3, 文档完备性: 2, 问题响应速度: 2 },
       status: 'APPROVED', approvedAt: D(-19, 10, 0), approver: '张建国', visibleTo: 'BOTH',
-      feedback: { id: 'fb04', user: '赵敏', content: '已排查为高峰期网关连接池耗尽，已完成连接池扩容与熔断配置优化（问题单 WT2026010005），请复测。', at: D(-18, 15, 0), status: 'APPROVED', approvedAt: D(-17, 9, 0) }
+      feedback: { id: 'fb04', user: '赵敏', content: '已排查为高峰期网关连接池耗尽，已完成连接池扩容与熔断配置优化（问题单 WT2026080005），请复测。', at: D(-18, 15, 0), status: 'APPROVED', approvedAt: D(-17, 9, 0) }
     }
   ];
 }
 
 function buildCallbacks(): any[] {
   return [
-    { id: 'cb01', ticketType: '事件单', ticketId: 'i01', ticketNo: 'SJ20260125001', score: 5, comment: '响应很快，按知识库指引很快就定位到问题，已恢复。', status: '已回访', sentAt: D(-1, 11, 0), repliedAt: D(-1, 15, 0), to: '李慧敏' },
-    { id: 'cb02', ticketType: '事件单', ticketId: 'i04', ticketNo: 'SJ20260124003', score: 4, comment: '已经恢复了，但希望根治，不要再出现。,', status: '已回访', sentAt: D(-2, 17, 0), repliedAt: D(-2, 18, 0), to: '王思远' },
-    { id: 'cb03', ticketType: '需求单', ticketId: 'd01', ticketNo: 'XQ20260112001', score: 5, comment: '交付及时，数据可用。', status: '已回访', sentAt: D(-9, 17, 0), repliedAt: D(-8, 10, 0), to: '李慧敏' },
-    { id: 'cb04', ticketType: '事件单', ticketId: 'i05', ticketNo: 'SJ20260126004', score: null, comment: '', status: '待回访', sentAt: D(0, 9, 0), to: '李慧敏' },
-    { id: 'cb05', ticketType: '需求单', ticketId: 'd03', ticketNo: 'XQ20260119003', score: null, comment: '', status: '待回访', sentAt: D(-2, 11, 0), to: '张建国' },
-    { id: 'cb06', ticketType: '事件单', ticketId: 'i07', ticketNo: 'SJ20260127006', score: null, comment: '', status: '待回访', sentAt: D(0, 9, 0), to: '吴强' },
-    { id: 'cb07', ticketType: '任务单', ticketId: 't01', ticketNo: 'RW20260114001', score: 5, comment: '加工结果符合预期。', status: '已回访', sentAt: D(-10, 17, 0), repliedAt: D(-10, 18, 0), to: '李慧敏' },
-    { id: 'cb08', ticketType: '事件单', ticketId: 'i03', ticketNo: 'SJ20260126003', score: null, comment: '', status: '待回访', sentAt: D(0, 9, 0), to: '吴强' }
+    { id: 'cb01', ticketType: '事件单', ticketId: 'i01', ticketNo: 'SJ20260829001', score: 5, comment: '响应很快，按知识库指引很快就定位到问题，已恢复。', status: '已回访', sentAt: D(-1, 11, 0), repliedAt: D(-1, 15, 0), to: '李慧敏' },
+    { id: 'cb02', ticketType: '事件单', ticketId: 'i04', ticketNo: 'SJ20260828003', score: 4, comment: '已经恢复了，但希望根治，不要再出现。,', status: '已回访', sentAt: D(-2, 17, 0), repliedAt: D(-2, 18, 0), to: '王思远' },
+    { id: 'cb03', ticketType: '需求单', ticketId: 'd01', ticketNo: 'XQ20260816001', score: 5, comment: '交付及时，数据可用。', status: '已回访', sentAt: D(-9, 17, 0), repliedAt: D(-8, 10, 0), to: '李慧敏' },
+    withLive(() => ({ id: 'cb04', ticketType: '事件单', ticketId: 'i05', ticketNo: liveNo('SJ20260830004'), score: null, comment: '', status: '待回访', sentAt: D(0, 9, 20), to: '李慧敏' })),
+    withLive(() => ({ id: 'cb05', ticketType: '需求单', ticketId: 'd03', ticketNo: 'XQ20260823003', score: null, comment: '', status: '待回访', sentAt: D(-2, 11, 0), to: '张建国' })),
+    withLive(() => ({ id: 'cb06', ticketType: '事件单', ticketId: 'i07', ticketNo: liveNo('SJ20260831006'), score: null, comment: '', status: '待回访', sentAt: D(0, 10, 5), to: '吴强' })),
+    { id: 'cb07', ticketType: '任务单', ticketId: 't01', ticketNo: 'RW20260818001', score: 5, comment: '加工结果符合预期。', status: '已回访', sentAt: D(-10, 17, 0), repliedAt: D(-10, 18, 0), to: '李慧敏' },
+    withLive(() => ({ id: 'cb08', ticketType: '事件单', ticketId: 'i03', ticketNo: liveNo('SJ20260830003'), score: null, comment: '', status: '待回访', sentAt: D(0, 11, 40), to: '吴强' }))
   ];
 }
 
 function buildBroadcasts(): any[] {
   return [
-    {
-      id: 'gb01', no: 'GB20260126001', title: '【事件通告】门急诊就诊记录数据延迟及处置进展',
-      content: '各位订阅方：\n2026-01-25 接反馈，门急诊就诊明细数据出现 T+1 延迟。经排查，根因为上游 3 家医院 LIS 系统夜间升级导致采集批次未完整上报。\n处置进展：\n1. 已完成手工补采，数据已恢复可用；\n2. 已创建问题单 WT2026010001 做根因整改，临时方案为发现延迟后 4 小时内手工补采恢复；\n3. 根治方案（批次完整性校验与自动补采）已派发任务单 RW20260125009。\n后续进展将通过本渠道持续通告。',
+    withLive(() => ({
+      id: 'gb01', no: liveNo('GB20260830001'), title: '【事件通告】门急诊就诊记录数据延迟及处置进展',
+      content: '各位订阅方：\n' + DD(-1) + ' 接反馈，门急诊就诊明细数据出现 T+1 延迟。经排查，根因为上游 3 家医院 LIS 系统夜间升级导致采集批次未完整上报。\n处置进展：\n1. 已完成手工补采，数据已恢复可用；\n2. 已创建问题单 ' + liveNo('WT2026080001') + ' 做根因整改，临时方案为发现延迟后 4 小时内手工补采恢复；\n3. 根治方案（批次完整性校验与自动补采）已派发任务单 ' + liveNo('RW20260829009') + '。\n后续进展将通过本渠道持续通告。',
       targets: [{ type: 'GROUP', ids: ['用数方', '订阅方'] }, { type: 'ORG', ids: ['市医疗保障局', '市疾病预防控制中心', '区全民健康信息平台（朝阳区）'] }],
       channels: ['站内', '邮件', '短信'], sender: '王思远', senderOrg: '三医数据底座服务台', sentAt: D(-1, 16, 0),
       readBy: ['李慧敏', '郑晓'], status: 'NEW', relatedId: 'i02'
-    },
-    {
-      id: 'gb02', no: 'GB20260127002', title: '【变更通知】01-28 至 01-30 数据服务变更窗口安排',
-      content: '各位用户：\n以下时段将安排数据服务变更，期间相关服务可能有短暂波动：\n1. 01-28 20:00 门急诊就诊明细查询服务字段范围调整（新增出参，向后兼容）；\n2. 01-30 22:00 医疗资源专题视图字段补充（需重建视图，文件服务沿用上一版本快照）；\n3. 01-30 22:00 数据需求管理模块功能增强版本发布。\n请相关订阅方提前做好适配准备。',
+    })),
+    withLive(() => ({
+      id: 'gb02', no: liveNo('GB20260831002'), title: '【变更通知】' + DD(1).slice(5) + ' 至 ' + DD(3).slice(5) + ' 数据服务变更窗口安排',
+      content: '各位用户：\n以下时段将安排数据服务变更，期间相关服务可能有短暂波动：\n1. ' + DD(1).slice(5) + ' 20:00 门急诊就诊明细查询服务字段范围调整（新增出参，向后兼容）；\n2. ' + DD(3).slice(5) + ' 22:00 医疗资源专题视图字段补充（需重建视图，文件服务沿用上一版本快照）；\n3. ' + DD(3).slice(5) + ' 22:00 数据需求管理模块功能增强版本发布。\n请相关订阅方提前做好适配准备。',
       targets: [{ type: 'GROUP', ids: ['全部用户'] }],
       channels: ['站内', '邮件'], sender: '赵敏', senderOrg: '平台运营中心', sentAt: D(0, 9, 0),
       readBy: [], status: 'NEW', relatedId: 'c01'
-    },
+    })),
     {
-      id: 'gb03', no: 'GB20260120003', title: '【安全提醒】密钥更换通知',
-      content: '为提升平台安全性，平台已对门急诊就诊实时推送服务（sv10）的全部订购方执行密钥更换。请相关应用在 2026-01-25 前完成 appSecret 更新，逾期将无法正常调用。密钥可在「服务订阅 → 密钥管理」中查看与补发。',
+      id: 'gb03', no: 'GB20260824003', title: '【安全提醒】密钥更换通知',
+      content: '为提升平台安全性，平台已对门急诊就诊实时推送服务（sv10）的全部订购方执行密钥更换。请相关应用在 2026-08-29 前完成 appSecret 更新，逾期将无法正常调用。密钥可在「服务订阅 → 密钥管理」中查看与补发。',
       targets: [{ type: 'GROUP', ids: ['订阅方'] }],
       channels: ['站内', '邮件', '短信'], sender: '赵敏', senderOrg: '平台运营中心', sentAt: D(-12, 9, 0),
       readBy: ['张建国', '李慧敏'], status: 'READ', relatedId: 'sb07'
     },
     {
-      id: 'gb04', no: 'GB20260115004', title: '【服务公告】数据沙箱使用规范更新',
+      id: 'gb04', no: 'GB20260819004', title: '【服务公告】数据沙箱使用规范更新',
       content: '数据沙箱使用规范已更新，高敏感数据（L4）的开发利用必须使用训练沙箱构建模型、数据沙箱生产运行、生产沙箱结果数据整合输出，原始明细数据不出数据沙箱。相关规范详见知识库《数据沙箱使用规范（原始明细不出沙箱）》。',
       targets: [{ type: 'GROUP', ids: ['全部用户'] }, { type: 'ORG', ids: ['市疾病预防控制中心', '北京大学第三医院'] }],
       channels: ['站内', '邮件'], sender: '周雅静', senderOrg: '安全与合规管理处', sentAt: D(-12, 14, 0),

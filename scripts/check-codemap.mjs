@@ -161,6 +161,26 @@ const routePaths = routes.map(r => r.path)
   else fail('视图复用标注', `被多条路由共用但未标 ⓐ：${noMark.join('、')}（在该行的职责或文件列末尾加 ⓐ）`)
 }
 
+/* ============================================================ ⑥ 剧本 / 待办路由可达 */
+{
+  /*
+   * config.ts 里的 route 字面量有两类消费者：演示剧本步骤与工作台待办（都走 router.push）。
+   * 写错（如 /incident-list 而真实路径是 /incident/list）不会报错，只会被兜底路由静默送回运营看板，
+   * 表现为「点了没反应」——因此在这里做一次静态对齐。
+   */
+  const cfg = read('src/core/config.ts')
+  const literals = [...new Set([...cfg.matchAll(/route:\s*'([^']+)'/g)].map(m => m[1]))]
+  const known = new Set(routePaths)
+  const bad = literals.filter(r => {
+    if (known.has(r)) return false
+    // 待办规则用 `:id` 占位（`route.replace(':id', rec.id)`），按前缀匹配真实路由
+    if (r.includes(':')) return !routePaths.some(p => p.startsWith(r.split(':')[0]) && p.includes(':'))
+    return true
+  })
+  if (!bad.length) pass(`剧本 / 待办路由：${literals.length} 个 route 字面量均命中真实路由`)
+  else fail('剧本 / 待办路由', `${bad.length} 个 route 字面量在 router 中不存在（会被兜底路由送回运营看板）：\n${bad.map(b => `    · ${b}`).join('\n')}`)
+}
+
 /* ================================================================ 汇总 -- */
 console.log('')
 if (failed) {

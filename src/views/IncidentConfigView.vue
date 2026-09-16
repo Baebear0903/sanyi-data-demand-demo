@@ -57,14 +57,14 @@ const catEditId = ref('')
 const catForm = reactive<any>({ name: '', group: '数据服务', autoAssign: '运维中心 · 一线支持组', keywords: [] as string[] })
 
 function openCatCreate() {
-  if (!store.can('selfservice.admin')) { ElMessage.warning('当前角色无「自助服务与类别配置」权限'); return }
+  if (!store.can('incident.category.config')) { ElMessage.warning('当前角色无「事件分类与模板配置」权限'); return }
   catEditId.value = ''
   Object.assign(catForm, { name: '', group: '数据服务', autoAssign: '运维中心 · 一线支持组', keywords: [] })
   catDialog.value = true
 }
 
 function openCatEdit(c: any) {
-  if (!store.can('selfservice.admin')) { ElMessage.warning('当前角色无「自助服务与类别配置」权限'); return }
+  if (!store.can('incident.category.config')) { ElMessage.warning('当前角色无「事件分类与模板配置」权限'); return }
   catEditId.value = c.id
   Object.assign(catForm, { name: c.name, group: c.group, autoAssign: c.autoAssign, keywords: [...listOf(c.keywords)] })
   catDialog.value = true
@@ -96,7 +96,7 @@ function saveCat() {
 }
 
 async function removeCat(c: any) {
-  if (!store.can('selfservice.admin')) { ElMessage.warning('当前角色无配置权限'); return }
+  if (!store.can('incident.category.config')) { ElMessage.warning('当前角色无配置权限'); return }
   const used = countOfCat(c.id)
   try {
     await ElMessageBox.confirm(
@@ -152,7 +152,7 @@ const tplForm = reactive<any>({
 const severityOptions = Object.entries(config.dicts.Severity as Record<string, any>).map(([v, o]) => ({ value: v, label: o.label }))
 
 function openTplCreate() {
-  if (!store.can('selfservice.admin')) { ElMessage.warning('当前角色无事件模板配置权限'); return }
+  if (!store.can('incident.category.config')) { ElMessage.warning('当前角色无事件模板配置权限'); return }
   tplEditId.value = ''
   Object.assign(tplForm, {
     name: '', categoryId: categories.value[0]?.id ?? 'ic01', severity: '中',
@@ -162,7 +162,7 @@ function openTplCreate() {
 }
 
 function openTplEdit(t: any) {
-  if (!store.can('selfservice.admin')) { ElMessage.warning('当前角色无事件模板配置权限'); return }
+  if (!store.can('incident.category.config')) { ElMessage.warning('当前角色无事件模板配置权限'); return }
   tplEditId.value = t.id
   Object.assign(tplForm, {
     name: t.name, categoryId: t.categoryId, severity: t.severity,
@@ -199,7 +199,7 @@ function saveTpl() {
 }
 
 async function removeTpl(t: any) {
-  if (!store.can('selfservice.admin')) { ElMessage.warning('当前角色无配置权限'); return }
+  if (!store.can('incident.category.config')) { ElMessage.warning('当前角色无配置权限'); return }
   try {
     await ElMessageBox.confirm(`确认删除事件模板「${t.name}」？`, '删除事件模板', {
       confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning'
@@ -210,6 +210,13 @@ async function removeTpl(t: any) {
 }
 
 const catNameOf = (id: string) => categories.value.find(c => c.id === id)?.name ?? '—'
+
+/**
+ * 分类与模板的配置权限（incident.category.config，当前仅平台管理员）。
+ * 无权限的角色仍可进入本页查看分类树 / 优先级规则（服务台核对分类要用），
+ * 但所有写操作按钮置灰——不再是「按钮能点、点了才报无权限」。
+ */
+const canConfig = computed(() => store.can('incident.category.config'))
 </script>
 
 <template>
@@ -219,10 +226,19 @@ const catNameOf = (id: string) => categories.value.find(c => c.id === id)?.name 
       desc="预先定义事件分类（含自动分派目标与匹配关键字）、严重等级 / 影响程度 / 紧急程度字典与优先级规则，并维护事件模板。"
     >
       <template #actions>
-        <el-button @click="openTplCreate"><el-icon><Plus /></el-icon> 新增模板</el-button>
-        <el-button type="primary" @click="openCatCreate"><el-icon><Plus /></el-icon> 新增分类</el-button>
+        <el-button :disabled="!canConfig" @click="openTplCreate"><el-icon><Plus /></el-icon> 新增模板</el-button>
+        <el-button type="primary" :disabled="!canConfig" @click="openCatCreate"><el-icon><Plus /></el-icon> 新增分类</el-button>
       </template>
     </PageHead>
+
+    <el-alert
+      v-if="!canConfig"
+      class="mb-4"
+      type="info"
+      show-icon
+      :closable="false"
+      title="查看态：当前角色无「事件分类与模板配置」权限，分类与模板的新增 / 编辑 / 删除已置灰；如需配置请切换为平台管理员。"
+    />
 
     <!-- ================================================== 事件分类管理 == -->
     <div class="card">
@@ -254,8 +270,8 @@ const catNameOf = (id: string) => categories.value.find(c => c.id === id)?.name 
           </el-table-column>
           <el-table-column label="操作" width="130" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openCatEdit(row)">编辑</el-button>
-              <el-button link type="danger" size="small" @click="removeCat(row)">删除</el-button>
+              <el-button link type="primary" size="small" :disabled="!canConfig" @click="openCatEdit(row)">编辑</el-button>
+              <el-button link type="danger" size="small" :disabled="!canConfig" @click="removeCat(row)">删除</el-button>
             </template>
           </el-table-column>
           <template #empty>
@@ -377,8 +393,8 @@ const catNameOf = (id: string) => categories.value.find(c => c.id === id)?.name 
           </el-table-column>
           <el-table-column label="操作" width="130" fixed="right">
             <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="openTplEdit(row)">编辑</el-button>
-              <el-button link type="danger" size="small" @click="removeTpl(row)">删除</el-button>
+              <el-button link type="primary" size="small" :disabled="!canConfig" @click="openTplEdit(row)">编辑</el-button>
+              <el-button link type="danger" size="small" :disabled="!canConfig" @click="removeTpl(row)">删除</el-button>
             </template>
           </el-table-column>
           <template #empty>

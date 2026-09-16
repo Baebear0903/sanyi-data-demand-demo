@@ -11,7 +11,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDemoStore } from '@/stores/demo'
 import { config } from '@/core/config'
-import { by, fmtTime, fromNow, iso } from '@/core/utils'
+import { by, demoUid, fmtTime, fromNow, iso, nowStamp } from '@/core/utils'
 import {
   readFileAsAttachment, sampleAttachment, type KbAttachment
 } from '@/core/attachments'
@@ -63,6 +63,144 @@ function onCatClick(node: any) {
 function clearCat() {
   selectedCat.value = null
   catTreeRef.value?.setCurrentKey(null)
+}
+
+/* ---------------------------------------------------- 知识分类维护 -- */
+/** 分类维度（原文：可按产品、用户群、业务领域、地点等分类） */
+const CAT_DIMS = ['产品', '用户群', '业务领域', '地点']
+/** 与「知识条目编辑」同权限：能维护知识条目的人即可维护其分类 */
+const canConfigCat = computed(() => store.can('kb.write'))
+
+/**
+ * 分类管理：一个入口 + 一个弹窗，对整棵目录做增删改与排序。
+ * 编辑作用于草稿（catDraft），点「保存」才校验并写回，取消则完全不影响页面。
+ */
+const catOpen = ref(false)
+const catDraft = ref<any[]>([])
+
+/** 统计某节点（含子级）下的知识条目数 */
+function draftCount(node: any): number {
+  const ids = catIdsOf(node)
+  return knowledges.value.filter(k => ids.includes(k.categoryId)).length
+}
+/** 在草稿树里定位节点，返回其所属的同级数组与下标（用于排序 / 删除） */
+function locateInDraft(id: string, nodes: any[] = catDraft.value, parent: any = null): { list: any[]; index: number; parent: any } | null {
+  for (let i = 0; i < list(nodes).length; i++) {
+    const n = nodes[i]
+    if (n.id === id) return { list: nodes, index: i, parent }
+    const hit = locateInDraft(id, list(n.children), n)
+    if (hit) return hit
+  }
+  return null
+}
+/** 把草稿树拍平成「路径 → 节点」映射，便于比对差异 */
+function flattenCats(nodes: any[], prefix = ''): { id: string; path: string; name: string; dim: string }[] {
+  const out: { id: string; path: string; name: string; dim: string }[] = []
+  for (const n of list(nodes)) {
+    const path = prefix ? `${prefix} / ${n.name}` : String(n.name)
+    out.push({ id: n.id, path, name: String(n.name), dim: String(n.dim ?? '') })
+    out.push(...flattenCats(list(n.children), path))
+  }
+  return out
+}
+
+function openCatManage() {
+  if (!canConfigCat.value) { ElMessage.warning('当前角色无「知识条目编辑」权限，无法维护知识分类'); return }
+  catDraft.value = JSON.parse(JSON.stringify(cats.value))
+  catOpen.value = true
+}
+/** 新增子分类（挂在当前行下；顶级用「新增一级分类」） */
+function draftAddChild(row: any | null) {
+  const node = { id: demoUid('kc'), name: '', dim: row?.dim ?? CAT_DIMS[0], children: [] as any[] }
+  if (row) {
+    if (!Array.isArray(row.children)) row.children = []
+    row.children.push(node)
+  } else {
+    catDraft.value.push(node)
+  }
+}
+/** 同级上移 / 下移 */
+function draftMove(row: any, delta: number) {
+  const hit = locateInDraft(row.id)
+  if (!hit) return
+  const target = hit.index + delta
+  if (target < 0 || target >= hit.list.length) return
+  const [item] = hit.list.splice(hit.index, 1)
+  hit.list.splice(target, 0, item)
+}
+/** 删除分类：其下（含子级）有知识条目时阻止，避免出现孤儿条目 */
+function draftRemove(row: any) {
+  const used = draftCount(row)
+  if (used) {
+    ElMessage.warning(`分类「${row.name || '未命名'}」下有 ${used} 条知识条目，请先调整条目归属后再删除`)
+    return
+  }
+  const hit = locateInDraft(row.id)
+  if (!hit) return
+  hit.list.splice(hit.index, 1)
+}
+/** 保存：校验 → 写回 → 改名级联 → 审计留痕 */
+function saveCatManage() {
+  const flatBefore = flattenCats(cats.value)
+  const flatAfter = flattenCats(catDraft.value)
+  // 校验：名称非空、同级不重名
+  const walk = (nodes: any[], path = ''): boolean => {
+    const seen = new Set<string>()
+    for (const n of list(nodes)) {
+      const name = String(n.name ?? '').trim()
+      if (!name) { ElMessage.warning(`「${path || '顶级分类'}」下存在未命名的分类`); return false }
+      if (seen.has(name)) { ElMessage.warning(`「${path || '顶级分类'}」下存在重名分类「${name}」`); return false }
+      seen.add(name)
+      const childPath = path ? `${path} / ${name}` : name
+      if (!walk(list(n.children), childPath)) return false
+    }
+    return true
+  }
+  if (!walk(catDraft.value)) return
+
+  // 差异：新增 / 删除 / 改名 / 维度 / 顺序
+  const beforeById = new Map(flatBefore.map(x => [x.id, x]))
+  const afterById = new Map(flatAfter.map(x => [x.id, x]))
+  const changes: { field: string; before: string; after: string }[] = []
+  for (const a of flatAfter) {
+    const b = beforeById.get(a.id)
+    if (!b) changes.push({ field: '新增分类', before: '（空）', after: `${a.path}（维度 ${a.dim}）` })
+    else if (b.name !== a.name || b.dim !== a.dim) changes.push({ field: `分类「${b.name}」`, before: `名称 ${b.name} · 维度 ${b.dim}`, after: `名称 ${a.name} · 维度 ${a.dim}` })
+  }
+  for (const b of flatBefore) if (!afterById.has(b.id)) changes.push({ field: '删除分类', before: b.path, after: '（已删除）' })
+  if (flatBefore.map(x => x.path).join(' > ') !== flatAfter.map(x => x.path).join(' > ')
+    && !changes.some(c => c.field === '新增分类' || c.field === '删除分类')) {
+    changes.push({ field: '分类顺序', before: flatBefore.map(x => x.name).join(' > '), after: flatAfter.map(x => x.name).join(' > ') })
+  }
+  if (!changes.length) { catOpen.value = false; return }
+
+  /* 写回：原地替换，保持 store 表引用不变 */
+  cats.value.splice(0, cats.value.length, ...JSON.parse(JSON.stringify(catDraft.value)))
+  /* 知识条目上冗余保存了分类名，改名时级联回写，避免「树上是新名、列表里是旧名」 */
+  const renamed = new Map(flatAfter.map(a => [a.id, a.name]))
+  knowledges.value.forEach(k => {
+    const nm = renamed.get(String(k.categoryId))
+    if (nm) k.categoryName = nm
+  })
+  /* 当前筛选的分类被删除时复位 */
+  if (selectedCat.value && !cats.value.some((c: any) => catIdsOf(c).includes(selectedCat.value.id))) clearCat()
+  store.addAudit({
+    bizType: 'kbCategories', bizId: 'kb-category-tree', bizNo: '知识分类',
+    bizTitle: `知识分类（${flatAfter.length} 个节点）`, action: '调整知识分类', changes
+  })
+  store.persist()
+  catOpen.value = false
+  ElMessage.success(`已保存分类调整（${changes.length} 处变更）`)
+}
+
+/** 在分类树中按 id 查找节点（支持任意层级） */
+function findCat(id: string, nodes: any[] = cats.value): any {
+  for (const n of list(nodes)) {
+    if (n.id === id) return n
+    const hit = findCat(id, list(n.children))
+    if (hit) return hit
+  }
+  return null
 }
 
 /* -------------------------------------------------------------- 检索 -- */
@@ -387,7 +525,7 @@ function saveKnowledge() {
   // 附件文本并入全文检索字段，保证新建条目后即可用「全文模糊检索 / 附件内容检索」命中
   const attachText = createForm.attachments.map(a => a.contentText).join(' ')
   const kb = store.insert('knowledges', {
-    no: `${config.prefixes.knowledges}202601${String(rows.length + 1).padStart(4, '0')}`,
+    no: `${config.prefixes.knowledges}${nowStamp().slice(0, 6)}${String(rows.length + 1).padStart(4, '0')}`,
     title: createForm.title.trim(),
     categoryId: createForm.categoryId,
     categoryName: cat?.leaf ?? '数据需求管理',
@@ -425,24 +563,25 @@ function saveKnowledge() {
           <span class="card__title">知识分类</span>
           <span class="card__spacer" />
           <el-button v-if="selectedCat" link type="primary" size="small" @click="clearCat">清除</el-button>
+          <el-button size="small" type="primary" plain :disabled="!canConfigCat" @click="openCatManage">
+            <el-icon><EditPen /></el-icon> 编辑
+          </el-button>
         </div>
         <div class="card__body">
-          <div class="text-xs muted mb-2">按产品 / 用户群 / 业务领域 / 地点等维度分类，节点右侧为条目数（父节点含子分类合计）；维护责任人在知识条目上维护。</div>
           <el-tree
             ref="catTreeRef" class="cat-tree"
             :data="cats" node-key="id" default-expand-all highlight-current
             :expand-on-click-node="false"
             :props="{ label: 'name', children: 'children' }" @node-click="onCatClick"
           >
-            <template #default="{ data }">
+            <template #default="{ node, data }">
               <span class="cat-node">
                 <span class="cat-node__name">{{ data.name }}</span>
-                <span v-if="list(data.children).length" class="cat-node__dim">{{ data.dim }}</span>
+                <span v-if="node.level === 1" class="cat-node__dim">{{ data.dim }}</span>
                 <span class="cat-node__count">{{ countOf(data) }} 条</span>
               </span>
             </template>
           </el-tree>
-          <div class="text-xs muted mt-3">当前范围：<b>{{ selectedCatName }}</b>（{{ filtered.length }} 条知识条目）</div>
         </div>
       </div>
 
@@ -667,6 +806,54 @@ function saveKnowledge() {
       </template>
       <div v-else class="empty-box"><div class="empty-box__text">未找到知识条目</div></div>
     </el-drawer>
+
+    <!-- ------------------------------------------------- 知识分类管理 -- -->
+    <el-dialog v-model="catOpen" title="知识分类管理" width="920px" top="6vh">
+      <div class="text-xs muted mb-3">
+        可直接修改分类名称与维度；同级内用「上移 / 下移」调整展示顺序；点「保存」统一生效并写入审计留痕。
+      </div>
+      <el-table
+        :data="catDraft" row-key="id" default-expand-all size="small" style="width: 100%"
+        :tree-props="{ children: 'children' }"
+      >
+        <el-table-column label="分类名称" min-width="240">
+          <template #default="{ row }">
+            <el-input v-model="row.name" size="small" placeholder="请输入分类名称" />
+          </template>
+        </el-table-column>
+        <el-table-column label="维度" width="132">
+          <template #default="{ row }">
+            <el-select v-model="row.dim" size="small" style="width: 116px">
+              <el-option v-for="d in CAT_DIMS" :key="d" :label="d" :value="d" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="知识条目" width="92">
+          <template #default="{ row }"><span class="muted text-xs">{{ draftCount(row) }} 条</span></template>
+        </el-table-column>
+        <el-table-column label="操作" width="252">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="draftAddChild(row)">新增子分类</el-button>
+            <el-button link type="primary" size="small" @click="draftMove(row, -1)">上移</el-button>
+            <el-button link type="primary" size="small" @click="draftMove(row, 1)">下移</el-button>
+            <el-button link type="danger" size="small" @click="draftRemove(row)">删除</el-button>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <div class="empty-box">
+            <div class="empty-box__icon"><el-icon><Files /></el-icon></div>
+            <div class="empty-box__text">暂无分类，点下方「新增一级分类」开始</div>
+          </div>
+        </template>
+      </el-table>
+      <div class="mt-3">
+        <el-button size="small" @click="draftAddChild(null)"><el-icon><Plus /></el-icon> 新增一级分类</el-button>
+      </div>
+      <template #footer>
+        <el-button @click="catOpen = false">取消</el-button>
+        <el-button type="primary" @click="saveCatManage">保存</el-button>
+      </template>
+    </el-dialog>
 
     <!-- ----------------------------------------------- 新建知识条目 -- -->
     <el-dialog v-model="createVisible" title="新建知识条目" width="820px" top="5vh">

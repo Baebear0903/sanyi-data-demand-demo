@@ -46,6 +46,7 @@ const BIZ_TYPES: { value: string; label: string; route?: (id: string) => string 
   { value: 'incidentCategories', label: '事件分类配置' },
   { value: 'incidentTemplates', label: '事件模板' },
   { value: 'qnas', label: '知识问答' },
+  { value: 'kbCategories', label: '知识分类配置' },
   { value: 'capabilityApplies', label: '能力申请' },
   { value: 'tenantRegs', label: '租户注册申请' },
   { value: 'broadcasts', label: '广播记录' },
@@ -72,7 +73,7 @@ const stats = computed(() => {
   const fieldChanges = rows.reduce((s, r) => s + arrAny(r.changes).length, 0)
   return [
     { label: '审计记录总数', value: rows.length, unit: '条', icon: 'DataAnalysis', tone: 'primary' as const, delta: `字段级变更 ${fieldChanges} 项` },
-    { label: '今日新增', value: rows.filter(r => String(r.operatedAt ?? '').startsWith(todayStr)).length, unit: '条', icon: 'Clock', tone: 'success' as const, delta: `基准日期 ${todayStr}` },
+    { label: '今日新增', value: rows.filter(r => String(r.operatedAt ?? '').startsWith(todayStr)).length, unit: '条', icon: 'Clock', tone: 'success' as const, delta: `统计日期 ${todayStr}` },
     { label: '涉及单据类型', value: types.size, unit: '类', icon: 'FolderOpened', tone: 'purple' as const, delta: '需求/变更/任务/事件/问题/发布…' },
     { label: '操作人数', value: operators.size, unit: '人', icon: 'User', tone: 'teal' as const }
   ]

@@ -11,7 +11,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDemoStore } from '@/stores/demo'
 import { config } from '@/core/config'
-import { NOW, by, fmtTime, fromNow, iso } from '@/core/utils'
+import { NOW, by, fmtTime, fromNow, iso, nowStamp } from '@/core/utils'
 import PageHead from '@/components/PageHead.vue'
 import StatCards from '@/components/StatCards.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -139,7 +139,7 @@ watch(() => route.query.problem, () => openFromProblemQuery())
 
 function nextNo(rows: any[]): string {
   const seq = String(rows.length + 1).padStart(3, '0')
-  return `${config.prefixes.releases}20260127${seq}`
+  return `${config.prefixes.releases}${nowStamp()}${seq}`
 }
 
 function submitCreate() {
@@ -387,7 +387,7 @@ function passRate(r: any): number {
           <el-date-picker v-model="form.releaseAt" type="datetime" value-format="YYYY-MM-DD HH:mm" format="YYYY-MM-DD HH:mm" placeholder="选择计划发布时间" />
         </el-form-item>
         <el-form-item label="停机时间">
-          <el-input v-model="form.downtime" placeholder="如：2026-01-30 22:00-23:00（预计 60 分钟）；无停机填「无（热更新）」" />
+          <el-input v-model="form.downtime" placeholder="如：2026-09-03 22:00-23:00（预计 60 分钟）；无停机填「无（热更新）」" />
         </el-form-item>
         <el-form-item label="发布包版本号">
           <el-input v-model="form.version" placeholder="如：v1.6.0（申请时预归档发布包，可后续在详情页回滚）" style="width: 260px" />

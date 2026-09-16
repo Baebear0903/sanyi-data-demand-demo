@@ -238,7 +238,7 @@ function prevStep() { step.value = Math.max(0, step.value - 1) }
 
 /* ------------------------------------------------------------ 提交 -- */
 function nextNo(): string {
-  // 单号日期统一取演示基准时间（nowStamp = 20260127），与单据创建 / 提交时间保持同一天
+  // 单号日期统一取当前日期（nowStamp，见 core/utils），与单据创建 / 提交时间保持同一天
   const day = nowStamp()
   const n = (store.table('demands') as any[]).filter(x => String(x.no).includes(day.slice(0, 6))).length + 1
   return `XQ${day}${String(n).padStart(3, '0')}`
@@ -585,7 +585,7 @@ const deliverable = computed(() => {
               </div>
               <div class="field field--block">
                 <span class="field__label">时间范围</span>
-                <el-input v-model="form.timeRange" placeholder="如 2024-01-01 ~ 2026-01-31 或 近 12 个月" />
+                <el-input v-model="form.timeRange" placeholder="如 2025-09-01 ~ 2026-08-31 或 近 12 个月" />
               </div>
               <div class="field field--block">
                 <span class="field__label">更新频率</span>

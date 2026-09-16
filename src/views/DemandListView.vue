@@ -122,16 +122,16 @@ function actionsOf(d: any): { label: string; type?: string; run: () => void }[] 
     out.push({ label: '审批', type: 'primary', run: () => doApprove(d) })
     out.push({ label: '驳回', run: () => doReject(d) })
   }
-  if (d.status === 'DRAFT' && (d.applicant === store.user.name)) {
+  if (d.status === 'DRAFT' && store.isMine(d.applicant)) {
     out.push({ label: '提交', type: 'primary', run: () => doSubmit(d) })
   }
-  if (['PENDING_ACCEPT', 'PENDING_APPROVE'].includes(d.status) && d.applicant === store.user.name) {
+  if (['PENDING_ACCEPT', 'PENDING_APPROVE'].includes(d.status) && store.isMine(d.applicant)) {
     out.push({ label: '撤回', run: () => doWithdraw(d) })
   }
-  if (d.status === 'PENDING_ACCEPTANCE' && d.applicant === store.user.name) {
+  if (d.status === 'PENDING_ACCEPTANCE' && store.isMine(d.applicant)) {
     out.push({ label: '验收', type: 'primary', run: () => doAccept2(d) })
   }
-  if (['APPROVED', 'DELIVERED'].includes(d.status) && d.applicant === store.user.name) {
+  if (['APPROVED', 'DELIVERED'].includes(d.status) && store.isMine(d.applicant)) {
     out.push({ label: '评价', type: 'primary', run: () => router.push('/evaluation') })
   }
   if (['APPROVED', 'IMPLEMENTING', 'DELIVERED'].includes(d.status) && can('demand.change')) {

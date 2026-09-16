@@ -3,7 +3,7 @@
  *
  * 职责：
  *  · 装载种子数据 / localStorage 持久化 / 一键重置
- *  · 当前演示角色与权限判定
+ *  · 当前登录账号与身份（角色）判定：账号名称恒定，切换身份只换权限与所属机构
  *  · 单据变更：自动写字段级审计（对应建设方案的变更/事件/问题/发布审计）
  *  · 通知中心与待办推导
  *
@@ -18,11 +18,17 @@ import type { AuditRecord, Message } from '@/core/types'
 import {
   NOW, iso, deepClone, find, findById, get, isArr, isFn, isNil, uid, by
 } from '@/core/utils'
-import { safeStore } from '@/core/storage'
+import { safeStore, safeSession } from '@/core/storage'
 
 const KEY = 'drm-demo-state-v1'
 const KEY_PREFS = 'drm-demo-prefs-v1'
 const KEY_COVERAGE = 'drm-coverage-v1'
+/** 本次会话的登录身份（会话级：新开标签页回到默认身份） */
+const KEY_ROLE = 'drm-demo-role-v1'
+/** 默认身份：平台管理员 —— 除非演示者手动切换，否则始终以管理员权限进入 */
+const DEFAULT_ROLE = 'admin'
+/** 登录账号名称：切换身份不改名，留痕统一记该账号 */
+const ACCOUNT_NAME = '超级管理员'
 
 export type Db = Record<string, any>
 
@@ -57,12 +63,34 @@ export const useDemoStore = defineStore('demo', {
     role(state): Role {
       return find(ROLES, r => r.id === state.roleId) ?? ROLES[0]
     },
+    /**
+     * 当前登录账号：演示系统以固定账号进入，**名称恒定**；
+     * 切换身份只改变该账号的角色（权限）与所属机构，账号本身不变。
+     * 因此所有基于本账号的操作（申请人 / 审批人 / 操作人 / 留痕）都记该账号名。
+     */
     user(state) {
       const r = find(ROLES, x => x.id === state.roleId) ?? ROLES[0]
-      return find(state.db.users ?? [], (u: any) => u.id === r.repUserId)
-        ?? { id: 'u0', name: '演示用户', org: '演示组织', title: '', phone: '', email: '' }
+      const rep = find(state.db.users ?? [], (u: any) => u.id === r.repUserId)
+        ?? { id: 'u0', name: ACCOUNT_NAME, org: '演示组织', title: '', phone: '', email: '' }
+      return { ...rep, name: ACCOUNT_NAME }
     },
-    /** 是否拥有权限点（admin.all 视为全量） */
+    /**
+     * 「本人」判定（提交 / 撤回 / 作废 / 验收 / 退订等入口）
+     *
+     * 种子单据的提交人记的是各身份对应的演示人员（李慧敏 / 张建国 …），
+     * 而本账号新建的单据记登录账号名；两者都算"本人"，
+     * 否则切到某个身份后，种子单据上的这些入口会整体消失。
+     */
+    isMine(state) {
+      return (name?: string | null): boolean => {
+        if (!name) return false
+        if (name === ACCOUNT_NAME) return true
+        const r = find(ROLES, x => x.id === state.roleId) ?? ROLES[0]
+        const rep = find(state.db.users ?? [], (u: any) => u.id === r.repUserId)
+        return !!(rep && rep.name === name)
+      }
+    },
+    /** 是否拥有权限点（角色 all: true 视为全量；perms 里的权限点逐条判定） */
     can(state) {
       return (perm: string): boolean => {
         const r = find(ROLES, x => x.id === state.roleId)
@@ -138,8 +166,8 @@ export const useDemoStore = defineStore('demo', {
       const cov = safeStore.get(KEY_COVERAGE)
       if (cov) { try { this.coverageChecked = JSON.parse(cov) } catch { this.coverageChecked = {} } }
 
-      const lastRole = this.db.meta?.lastRole
-      this.roleId = (lastRole && find(ROLES, r => r.id === lastRole)) ? lastRole : ROLES[0].id
+      const lastRole = safeSession.get(KEY_ROLE)
+      this.roleId = (lastRole && find(ROLES, r => r.id === lastRole)) ? lastRole : DEFAULT_ROLE
       this._loaded = true
 
       /*
@@ -153,10 +181,7 @@ export const useDemoStore = defineStore('demo', {
 
     persist() {
       if (!this._loaded) return
-      try {
-        if (this.db.meta) this.db.meta.lastRole = this.roleId
-        safeStore.set(KEY, JSON.stringify(this.db))
-      } catch { /* 超配额时仅保留内存态 */ }
+      try { safeStore.set(KEY, JSON.stringify(this.db)) } catch { /* 超配额时仅保留内存态 */ }
     },
 
     savePrefs() { safeStore.set(KEY_PREFS, JSON.stringify(this.prefs)) },
@@ -169,10 +194,11 @@ export const useDemoStore = defineStore('demo', {
       this.persist()
     },
 
-    /* -------------------------------------------------------------- 角色 -- */
+    /* -------------------------------------------------------------- 身份 -- */
+    /** 切换本账号的身份（角色）：权限与所属机构随身份变化，账号名称不变 */
     setRole(id: string) {
       this.roleId = id
-      this.persist()
+      safeSession.set(KEY_ROLE, id)
     },
 
     /* -------------------------------------------------------------- 表 -- */

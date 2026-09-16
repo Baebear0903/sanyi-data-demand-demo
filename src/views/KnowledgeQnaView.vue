@@ -11,7 +11,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDemoStore } from '@/stores/demo'
 import { config } from '@/core/config'
-import { by, demoUid, fmtTime, fromNow, iso } from '@/core/utils'
+import { by, demoUid, fmtTime, fromNow, iso, nowStamp } from '@/core/utils'
 import PageHead from '@/components/PageHead.vue'
 import StatCards from '@/components/StatCards.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -79,7 +79,7 @@ function submitAsk() {
   if (!askForm.description.trim()) { ElMessage.warning('请填写问题详细描述'); return }
   const rows = qnas.value
   const qa = store.insert('qnas', {
-    no: `${config.prefixes.qnas}202601${String(rows.length + 1).padStart(4, '0')}`,
+    no: `${config.prefixes.qnas}${nowStamp().slice(0, 6)}${String(rows.length + 1).padStart(4, '0')}`,
     question: askForm.question.trim(),
     description: askForm.description.trim(),
     asker: store.user.name,
@@ -195,7 +195,7 @@ function archive(q: any, ans: any) {
     const desc = String(q.description ?? '')
     const kbRows = store.table('knowledges') as any[]
     const kb = store.insert('knowledges', {
-      no: `${config.prefixes.knowledges}202601${String(kbRows.length + 1).padStart(4, '0')}`,
+      no: `${config.prefixes.knowledges}${nowStamp().slice(0, 6)}${String(kbRows.length + 1).padStart(4, '0')}`,
       title: questions,
       categoryId: defaultCat.value.id,
       categoryName: defaultCat.value.name,

@@ -8,7 +8,7 @@
  *  · 租户与应用：租户注册申请审核、能力申请审核（对应能力开放门户）
  *  · 系统参数与系统维护
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDemoStore } from '@/stores/demo'
 import { config } from '@/core/config'
@@ -34,6 +34,122 @@ function switchToRole(id: string) {
   store.setRole(id)
   const r = ROLES.find(x => x.id === id)
   ElMessage.success(`已切换为「${r?.name}」，菜单与数据范围已同步变化`)
+}
+
+/* ------------------------------------------------ 服务目录权限矩阵 -- */
+/*
+ * 「哪个角色能申请哪个服务」由服务目录项（catalogItems）的 allowedRoles 决定。
+ * 该矩阵原先挂在「自助服务管理」（用数方可见的自助门户）里，现已迁到本页：
+ * 它是授权策略、属于平台配置，与上方权限点矩阵同族；用数方在自助服务页只看得到结果
+ * （服务目录的「可申请角色」列、服务产品的「当前角色无权申请」置灰）。
+ * 编辑能力沿用系统配置页自身权限（admin.all）——当前仅平台管理员具备。
+ */
+const catalogItems = computed(() => store.table('catalogItems') as any[])
+const workflows = computed(() => store.table('workflows') as any[])
+const arrAny = (v: unknown): any[] => (Array.isArray(v) ? v : [])
+const flowName = (id: string) => workflows.value.find(w => w.id === id)?.name ?? id
+
+const canEditMatrix = computed(() => store.can('admin.all'))
+const editingMatrix = ref(false)
+/** 编辑态草稿：{ 服务目录项 id: 角色 id[] }，保存前不落库 */
+const draftRoles = ref<Record<string, string[]>>({})
+
+const matrixDirty = computed(() => {
+  if (!editingMatrix.value) return false
+  return catalogItems.value.some(i => {
+    const before = [...arrAny(i.allowedRoles)].sort().join(',')
+    const after = [...(draftRoles.value[i.id] ?? [])].sort().join(',')
+    return before !== after
+  })
+})
+
+function startEditMatrix() {
+  if (!canEditMatrix.value) {
+    ElMessage.warning(`当前角色「${store.role.name}」无系统配置权限，无法调整服务目录权限矩阵（请切换为平台管理员）`)
+    return
+  }
+  const draft: Record<string, string[]> = {}
+  catalogItems.value.forEach(i => { draft[i.id] = [...arrAny(i.allowedRoles)] })
+  draftRoles.value = draft
+  editingMatrix.value = true
+  ElMessage.info('已进入编辑态：勾选 / 取消勾选后点「保存权限配置」生效')
+}
+function cancelEditMatrix() {
+  editingMatrix.value = false
+  draftRoles.value = {}
+}
+function toggleMatrix(roleId: string, itemId: string) {
+  const cur = draftRoles.value[itemId] ?? []
+  draftRoles.value = {
+    ...draftRoles.value,
+    [itemId]: cur.includes(roleId) ? cur.filter(r => r !== roleId) : [...cur, roleId]
+  }
+}
+/**
+ * 编辑态与系统配置权限绑定：切换角色即退出编辑态并作废草稿。
+ * 进入编辑态只在点击时校验一次权限，若编辑态跨角色切换继续存在，
+ * 无该权限的角色就能沿用别人的编辑态继续勾选并保存（越权改服务授权）。
+ */
+watch(() => store.roleId, () => {
+  if (!editingMatrix.value) return
+  editingMatrix.value = false
+  draftRoles.value = {}
+  if (!canEditMatrix.value) {
+    ElMessage.warning(`已切换为「${store.role.name}」，该角色无系统配置权限，编辑态已退出、未保存的调整已作废`)
+  }
+})
+/** 保存：把草稿写回服务目录项（allowedRoles），并写审计留痕 */
+function saveMatrix() {
+  // 落库前复核权限：编辑态可能是在具备权限的角色下进入的，而当前角色未必仍有权限
+  if (!canEditMatrix.value) {
+    editingMatrix.value = false
+    draftRoles.value = {}
+    ElMessage.warning(`当前角色「${store.role.name}」无系统配置权限，无法保存权限配置（请切换为平台管理员）`)
+    return
+  }
+  if (!matrixDirty.value) { ElMessage.info('权限配置没有变化'); editingMatrix.value = false; return }
+  let changed = 0
+  const detail: string[] = []
+  for (const item of catalogItems.value) {
+    const before = [...arrAny(item.allowedRoles)].sort()
+    const after = [...(draftRoles.value[item.id] ?? [])].sort()
+    if (before.join(',') === after.join(',')) continue
+    changed++
+    const nameOf = (id: string) => store.roles.find(r => r.id === id)?.name ?? id
+    detail.push(`${item.name}：${after.map(nameOf).join('、') || '（无角色可申请）'}`)
+    store.update('catalogItems', item.id, { allowedRoles: [...(draftRoles.value[item.id] ?? [])] }, {
+      action: '调整服务权限', remark: `${item.name} 可申请角色 → ${after.map(nameOf).join('、') || '（无）'}`
+    })
+  }
+  editingMatrix.value = false
+  draftRoles.value = {}
+  ElMessage.success(`已保存 ${changed} 个服务目录项的权限配置，自助服务管理的服务目录可用项已同步刷新`)
+  store.notify({
+    type: 'info', title: '服务目录权限矩阵已更新',
+    body: `共调整 ${changed} 个服务目录项的可申请角色：${detail.slice(0, 3).join('；')}${detail.length > 3 ? ' 等' : ''}`,
+    toRoles: ['desk', 'supplier', 'consumer'], link: '/admin'
+  })
+}
+/** 恢复出厂默认（种子数据的 allowedRoles；后新增的类别不在默认表内，保持不动） */
+function resetMatrix() {
+  ElMessageBox.confirm('将把服务目录权限矩阵恢复为出厂默认配置，是否继续？', '恢复默认权限', {
+    confirmButtonText: '恢复默认', cancelButtonText: '取消', type: 'warning'
+  }).then(() => {
+    const defaults: Record<string, string[]> = {
+      sc01: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin'],
+      sc02: ['consumer', 'supplier', 'desk', 'admin'],
+      sc03: ['consumer', 'supplier', 'desk', 'admin'],
+      sc04: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin'],
+      sc05: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin'],
+      sc06: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin']
+    }
+    for (const item of catalogItems.value) {
+      const d = defaults[item.id]
+      if (d) store.update('catalogItems', item.id, { allowedRoles: [...d] }, { action: '恢复默认服务权限', remark: item.name })
+    }
+    if (editingMatrix.value) startEditMatrix()
+    ElMessage.success('已恢复出厂默认权限配置')
+  }).catch(() => { /* 取消 */ })
 }
 
 /* ------------------------------------------------------ 租户与能力 -- */
@@ -157,6 +273,66 @@ function saveParams() {
                       <el-icon v-if="c.has"><Check /></el-icon>
                       <span v-else>—</span>
                     </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="section-title">
+              服务目录权限矩阵（勾选表示该角色可申请该服务项，— 表示该角色不可申请该服务项）
+              <span class="card__spacer" />
+              <template v-if="!editingMatrix">
+                <el-button size="small" type="primary" plain :disabled="!canEditMatrix" @click="startEditMatrix">
+                  <el-icon><EditPen /></el-icon> 编辑权限配置
+                </el-button>
+                <el-button size="small" :disabled="!canEditMatrix" @click="resetMatrix">恢复默认</el-button>
+              </template>
+              <template v-else>
+                <StatusTag :label="matrixDirty ? '编辑中（未保存）' : '编辑中'" :tone="matrixDirty ? 'warning' : 'info'" :dot="false" />
+                <el-button size="small" @click="cancelEditMatrix">取消</el-button>
+                <el-button size="small" type="primary" @click="saveMatrix">保存权限配置</el-button>
+              </template>
+            </div>
+            <div v-if="!canEditMatrix" class="matrix-tip">
+              <el-icon><InfoFilled /></el-icon>
+              当前角色「{{ store.role.name }}」为查看态：矩阵以 ✓ / — 展示各角色可申请的服务内容。
+              如需调整勾选，请切换到 <b>平台管理员</b>（具备系统配置权限）后点「编辑权限配置」。
+            </div>
+            <div v-else-if="!editingMatrix" class="matrix-tip matrix-tip--ok">
+              <el-icon><InfoFilled /></el-icon>
+              当前角色「{{ store.role.name }}」具备系统配置权限：点右上角 <b>「编辑权限配置」</b> 即可勾选 / 取消勾选各角色可申请的服务内容，保存后立即生效。
+            </div>
+            <div v-else class="matrix-tip matrix-tip--edit">
+              <el-icon><EditPen /></el-icon>
+              编辑态：点击单元格勾选 / 取消勾选，调整该角色可申请的服务内容；<b>保存权限配置</b>后立即生效（自助服务管理的服务目录可用项、服务卡「立即申请」按钮同步刷新）。
+            </div>
+            <div class="tablewrap mb-4">
+              <table class="matrix">
+                <thead>
+                  <tr>
+                    <th style="min-width: 190px">服务目录项</th>
+                    <th v-for="r in ROLES" :key="r.id"><span :class="{ bold: store.role.id === r.id }">{{ r.name }}</span></th>
+                    <th style="width: 110px">类别</th>
+                    <th style="width: 210px">激活流程</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in catalogItems" :key="item.id">
+                    <td>{{ item.name }}</td>
+                    <td v-for="r in ROLES" :key="r.id">
+                      <template v-if="editingMatrix">
+                        <el-checkbox
+                          :model-value="(draftRoles[item.id] ?? []).includes(r.id)"
+                          @change="toggleMatrix(r.id, item.id)"
+                        />
+                      </template>
+                      <span v-else :class="arrAny(item.allowedRoles).includes(r.id) ? 'yes' : 'no'">
+                        <el-icon v-if="arrAny(item.allowedRoles).includes(r.id)"><Check /></el-icon>
+                        <span v-else>—</span>
+                      </span>
+                    </td>
+                    <td>{{ item.category }}</td>
+                    <td class="text-xs muted">{{ flowName(item.flowId) }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -343,6 +519,15 @@ function saveParams() {
 .tablewrap { overflow-x: auto; }
 .matrix .yes { color: var(--success-fg); font-size: 15px; }
 .matrix .no { color: var(--text-4); }
+/* 服务目录权限矩阵的查看态 / 编辑态提示条 */
+.matrix-tip {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: var(--fs-xs); color: var(--text-2);
+  background: var(--surface-2); border: 1px solid var(--border-2);
+  border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3);
+}
+.matrix-tip--edit { background: var(--brand-50); border-color: var(--brand-200, var(--brand-400)); color: var(--brand-700, var(--brand-600)); }
+.matrix-tip--ok { background: var(--success-bg); border-color: var(--success); color: var(--success-fg); }
 .fitem { display: flex; flex-direction: column; gap: 6px; }
 .fitem__label { font-size: var(--fs-sm); color: var(--text-2); }
 .fitem__hint { font-size: var(--fs-xs); color: var(--text-3); }

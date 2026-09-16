@@ -146,7 +146,7 @@ function applyTemplate(id: string) {
 }
 
 function nextChangeNo(): string {
-  // 单号日期必须取演示基准时间（NOW = 2026-01-27），与单据创建时间保持同一天
+  // 单号日期取当前日期（NOW，见 core/utils），与单据创建时间保持同一天
   const day = nowStamp()
   return `BG${day}${String((store.table('changes') as any[]).length + 1).padStart(3, '0')}`
 }

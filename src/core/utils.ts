@@ -18,8 +18,19 @@ export function truncate(s: unknown, n: number): string {
 export const pad2 = (n: number) => (n < 10 ? '0' + n : String(n))
 
 /* ---------------------------------------------------------------- 日期 -- */
-/** 演示基准时间：固定，保证数据与图表可复现 */
-export const NOW = new Date('2026-01-27T10:30:00')
+/**
+ * 演示系统使用**双时钟**（两者的分工必须分清，混用会导致时间自相矛盾）：
+ *
+ * · `NOW` —— 运行时"当前时间"，取真实系统时间（模块加载时求值一次，同一次会话内稳定）。
+ *   新增单据、审计留痕、单号日期段、SLA 剩余/超期、"今日/近 N 天"统计、图表窗口终点、
+ *   待办时限、默认日期预填等**一切"现在"的口径**都用它。
+ * · `SEED_ANCHOR` —— 种子"历史归档"数据的固定锚点，与真实时间无关，保证历史数据可复现。
+ *   只有 `mock/seed.ts` 在生成**已终结/历史**记录时使用；未关闭记录与近 7 天小时桶另用
+ *   真实时间锚定（见 seed.ts 的 live/withLive）。
+ */
+export const NOW = new Date()
+/** 种子历史锚点：固定值，仅用于生成历史归档种子数据 */
+export const SEED_ANCHOR = new Date('2026-08-31T10:30:00')
 
 export function toDate(v: unknown): Date | null {
   if (v instanceof Date) return v
@@ -173,9 +184,10 @@ export const arr = <T>(v: T[] | undefined | null): T[] => (Array.isArray(v) ? v 
 
 /* ------------------------------------------------ 演示基准时间工具 -- */
 /**
- * 演示系统必须使用固定的基准时间（NOW），不能取真实系统时间。
- * 原因：种子数据全部以 2026-01-27 为基准生成，若新增记录用 new Date()，
- * 会出现「今天创建的工单」与「基准日的数据」混排，时间轴与统计图表失真的问题。
+ * 运行时"现在"统一取 NOW（真实系统时间，模块加载时求值一次）。
+ * 历史归档种子数据另用 SEED_ANCHOR 生成，两者不可混用：
+ * 新增记录、审计、单号、SLA、统计窗口一律用 NOW；只有种子历史数据用 SEED_ANCHOR。
+ * 种子内容变化时需递增 config.version（localStorage 数据版本闸门），否则旧浏览器仍用旧种子。
  */
 /** 当前演示时间戳（'YYYY-MM-DD HH:mm'） */
 export const nowIso = (): string => iso(NOW)

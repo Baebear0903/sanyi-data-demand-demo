@@ -20,21 +20,21 @@
 | --- | --- | --- | --- | --- |
 | 运营看板 | `/workbench` | `WorkbenchView.vue` | 汇总需求受理交付、生产任务、运维事件的关键指标；待办与消息入口。**同时承载 `/coverage`**ⓐ | `cdp-smoke`、`verify-drawer` |
 | 审计中心 | `/audit` | `AuditView.vue` | 只读的字段级留痕查询，承载 4 类审计覆盖 | **`verify-audit-chain`** |
-| 系统配置 | `/admin` | `AdminView.vue` | 角色与权限矩阵、字典、演示配置 | — |
+| 系统配置 | `/admin` | `AdminView.vue` | 角色与权限矩阵、**服务目录权限矩阵**（谁能申请哪个服务）、字典、演示配置 | `verify-audit-chain` |
 | 需求单管理 | `/demand/list` | `DemandListView.vue` | 需求单列表：筛选 + 表格 + 分页（**列表模式样板页**） | `cdp-smoke`、`verify-gaps` |
 | 需求申请管理 | `/demand/apply` | `DemandApplyView.vue` | 4 步申请向导 | `cdp-smoke` |
 | 需求变更管理 | `/change/list` | `ChangeListView.vue` | 变更单创建与审批、"调整实施计划"入口 | `cdp-smoke`、`verify-gaps` |
-| 可视化变更窗口 | `/change/calendar` | `ChangeCalendarView.vue` | 变更窗口的可视化排期视图 | `verify-gaps` |
+| 可视化变更窗口 | `/change/calendar` | `ChangeCalendarView.vue` | 变更窗口的可视化排期视图 | —（旅程无自动化覆盖；版式核验用 `audit-layout --pages=可视化变更窗口`） |
 | 任务管理 | `/task/list` | `TaskListView.vue` | 任务单列表；**同时承载任务单详情**ⓐ | `cdp-smoke` |
 | 工作流管理 | `/workflow` | `WorkflowView.vue` | 工单审批规则与自动化部署（产物生成） | `cdp-smoke`、`verify-gaps` |
 | 交付与授权 | `/delivery` | `DeliveryView.vue` | 资源订阅与授权；**同时承载订阅单详情**ⓐ | `cdp-smoke` |
 | 事件管理 | `/incident/list` | `IncidentListView.vue` | 事件录入、派发、处理 | — |
 | 问题管理 | `/problem/list` | `ProblemListView.vue` | 问题根因分析、已知错误流程 | `verify-gaps` |
 | 发布管理 | `/release/list` | `ReleaseListView.vue` | 发布包管理、升级、回滚 | `cdp-smoke`、`verify-gaps` |
-| 知识库管理 | `/kb/list` | `KnowledgeListView.vue` | 知识条目增删改审；**同时承载知识条目详情**ⓐ | `cdp-smoke` |
+| 知识库管理 | `/kb/list` | `KnowledgeListView.vue` | 知识条目增删改审、知识分类新增 / 编辑；**同时承载知识条目详情**ⓐ | `cdp-smoke` |
 | 知识问答管理 | `/kb/qna` | `KnowledgeQnaView.vue` | 征询问答，可归档为知识 | `cdp-smoke`、`verify-gaps` |
-| 服务台管理 | `/service-desk` | `ServiceDeskView.vue` | 统一受理台 | `cdp-smoke`、`verify-gaps` |
-| 自助服务管理 | `/selfservice` | `SelfServiceView.vue` | 服务目录自助申请 + 权限配置 | `cdp-smoke`、`verify-gaps`、`verify-audit-chain` |
+| 服务台管理 | `/service-desk` | `ServiceDeskView.vue` | 统一受理台 + 预定义需求类别（对照 + **配置抽屉**：增删改类别 / 字段 / 流程） | `cdp-smoke`、`verify-gaps` |
+| 自助服务管理 | `/selfservice` | `SelfServiceView.vue` | 消费者自助门户：服务目录（服务指标清单）/ 服务产品（图文 + 搜索）两个页签 + 预定义需求类别（只读）+ Web / 邮件提交 | `cdp-smoke`、`verify-gaps` |
 | 评价管理 | `/evaluation` | `EvaluationView.vue` | 验收评价与反馈 | `verify-gaps` |
 | 统计分析 | `/stats` | `StatsView.vue` | 多维度统计图表 | — |
 
@@ -67,7 +67,7 @@
 
 | 文件 | 职责 | 额外核验 |
 | --- | --- | --- |
-| `src/stores/demo.ts` | 数据仓库：种子装载、localStorage 持久化、权限判定、字段级审计留痕、重置 | `cdp-smoke` |
+| `src/stores/demo.ts` | 数据仓库：种子装载、localStorage 持久化、登录账号与身份（角色）判定、字段级审计留痕、重置 | `cdp-smoke` |
 | `src/stores/ui.ts` | 全局浮层状态（含覆盖表"上次看到哪儿"缓存） | `verify-drawer` |
 | `src/mock/seed.ts` | 演示种子数据（约 2200 行），**示例编号的唯一真源** | `check-recipes` |
 
@@ -79,10 +79,11 @@
 | `types.ts` | 数据类型定义 |
 | `roles.ts` | 角色与权限矩阵的类型定义与再导出（数据本体内联在 `config.ts`） |
 | `utils.ts` | 日期 / 数字 / 集合 / 掩码 / **演示基准时间** |
-| `storage.ts` | localStorage 适配层（受限环境降级为内存） |
+| `storage.ts` | localStorage / sessionStorage 适配层（受限环境降级为内存） |
 | `artifacts.ts` | 自动化部署产物内核（生成 / 落库 / 历史重建） |
 | `attachments.ts` | 知识条目附件内核（读文件 / 类型识别 / 文本抽取） |
 | `changePlan.ts` | 变更"实施计划"可编辑规则与冲突分析 |
+| `serviceCatalog.ts` | 预定义需求类别的「类别 → 生成单据类型」映射（唯一真源，供自助服务页与服务台页共用） |
 | `chart.ts` | 自绘 SVG 图表内核（不引 ECharts） |
 | `featureList.ts` | **生成物**：功能清单真源，由 `scripts/gen-feature-list.mjs` 生成，**禁止手改** |
 | `recipes.ts` | 功能点覆盖说明的类型与入口 |
@@ -106,7 +107,7 @@
 | 脚本 | 职责 | 依赖 |
 | --- | --- | --- |
 | `check-recipes.mjs` | 覆盖表七项校验（69 行完备性 / 原文逐字一致 / 示例编号真实存在） | 纯静态，无外部依赖 |
-| `check-codemap.mjs` | 本文件的结构对齐校验（视图文件 ↔ 路由 ↔ 地图行） | 纯静态，无外部依赖 |
+| `check-codemap.mjs` | 本文件的结构对齐校验（视图文件 ↔ 路由 ↔ 地图行）+ 剧情 / 待办路由可达性 | 纯静态，无外部依赖 |
 | `gen-feature-list.mjs` | 由本地功能清单生成 `src/core/featureList.ts` | **需根目录迭代文档**，仅本地可跑 |
 | `gen-recipes.mjs` | 由本地功能清单生成覆盖说明数据 | **需根目录迭代文档**，仅本地可跑 |
 | `deploy-github.mjs` | 只把 `demo/` 内容推成远端仓库根 | GitHub 远端 |
@@ -117,17 +118,12 @@
 
 | 脚本 | 覆盖 |
 | --- | --- |
-| `audit-tables.mjs` | 全站 29 页表格版式 |
-| `audit-layout.mjs` | 全站 29 页版式 |
-| `audit-overflow.mjs` | 横向溢出 / 硬裁切 / 头部错行 |
+| `audit-layout.mjs` | 版式体检（8 类判据：操作列换行/溢出、整页与容器溢出、同格基线、单元格溢出、头部错行、文字裁切）。**必须 `--pages=<中文页名>` 收窄，或 `--all` 全量** |
 | `e2e/cdp-smoke.mjs` | P0 状态流转 + P1（最重要的回归基线） |
-| `e2e/verify-gaps.mjs` | 21 条验收要点可达性 |
+| `e2e/verify-gaps.mjs` | 验收要点可达性（G1–G8、G10、G11） |
 | `e2e/capture-proof.mjs` | 出验收证据截图 → `验收问题回复/` |
-| `e2e/probe-acceptance.mjs` | 定点核验"待验收 → 验收 / 评价"可达 |
 | `verify-audit-chain.mjs` | 留痕链路：自助服务改权限 → 审计中心可见 |
 | `verify-drawer.mjs` | 覆盖表抽屉 + "上次看到哪儿"缓存 |
-| `verify-audit.mjs` / `verify-coverage-text.mjs` | 审计中心只读化 / 覆盖表文案的定点复查 |
-| `inspect-*.mjs` | 单页几何取证 + 截图（`change` / `clip` / `dropdown` / `expand` / `align`） |
 
 ---
 

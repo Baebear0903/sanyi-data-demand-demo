@@ -421,7 +421,7 @@ function actionsOf(sub: any) {
     out.push({ label: '审批订阅', type: 'primary', run: () => approve(sub) })
     out.push({ label: '驳回', run: () => reject(sub) })
   }
-  if (['APPROVED', 'PENDING'].includes(sub.approveStatus) && (store.can('demand.apply') || sub.appId === (apps.value.find(a => a.owner === store.user.name)?.id ?? ''))) {
+  if (['APPROVED', 'PENDING'].includes(sub.approveStatus) && (store.can('demand.apply') || sub.appId === (apps.value.find(a => store.isMine(a.owner))?.id ?? ''))) {
     out.push({ label: '退订', run: () => unsubscribe(sub) })
   }
   out.push({ label: '详情', run: () => openDetail(sub) })

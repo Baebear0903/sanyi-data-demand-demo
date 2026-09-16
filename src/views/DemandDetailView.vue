@@ -87,7 +87,7 @@ function flowClass(i: number): string {
  * 验收 / 评价是否对当前角色可见
  *
  * 背景（本轮核验发现的死角）：原实现只判「申请人姓名 === 当前用户姓名」。但演示数据里大量单据的
- * 申请人并不是演示用户（`XQ20260116002` 的申请人「吴强」、邮件单的「黄伟」、服务台代申报的
+ * 申请人并不是演示用户（`XQ20260820002` 的申请人「吴强」、邮件单的「黄伟」、服务台代申报的
  * 「王思远」…），这些单据一旦被推进到「待验收」，**任何角色都点不到「验收」**，
  * 「已交付 / 已评价」两步永远不可达（与验收问题九同源的"状态机死角"）。
  * 按角色职责矩阵，验收与评价本就是需求方（用数方）的职责，故补角色兜底。
@@ -95,7 +95,7 @@ function flowClass(i: number): string {
 const canAcceptance = computed(() => {
   const x = d.value
   if (!x) return false
-  return x.applicant === store.user.name || ['consumer', 'admin'].includes(store.role.id)
+  return store.isMine(x.applicant) || ['consumer', 'admin'].includes(store.role.id)
 })
 
 function actionsOf(): { label: string; type?: string; run: () => void }[] {
@@ -103,7 +103,7 @@ function actionsOf(): { label: string; type?: string; run: () => void }[] {
   if (!x) return []
   const out: { label: string; type?: string; run: () => void }[] = []
   const can = store.can
-  const isApplicant = x.applicant === store.user.name
+  const isApplicant = store.isMine(x.applicant)
   if (x.status === 'PENDING_ACCEPT' && can('demand.accept')) out.push({ label: '受理', type: 'primary', run: () => doAccept() })
   if (x.status === 'PENDING_APPROVE' && can('demand.approve')) {
     out.push({ label: '审批', type: 'primary', run: () => doApprove() })

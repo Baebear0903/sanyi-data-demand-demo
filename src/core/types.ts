@@ -229,7 +229,7 @@ export interface CatalogItem {
   formSchema: { key: string; label: string; type: string; required: boolean; options?: string[] }[]
 }
 export interface KbCategory {
-  id: string; name: string; dim: string; owner: string
+  id: string; name: string; dim: string
   children: KbCategory[]
 }
 export interface IncidentCategory {

@@ -16,6 +16,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDemoStore, dictItem } from '@/stores/demo'
 import { config } from '@/core/config'
+import { ticketKindOf } from '@/core/serviceCatalog'
 import {
   addDays, by, countBy, fmtDate, fmtTime, fromNow, hoursAgo, iso, today, toDate, truncate
 } from '@/core/utils'
@@ -125,14 +126,17 @@ const intakeRows = computed<IntakeRow[]>(() => by(intakeOf(intakeTab.value), 'su
 
 /* ================================ 预定义需求类别（原文 9.6 的类别落地） -- */
 /**
- * 「预定义需求类别」的定义数据在自助服务管理 → 服务目录（catalogItems）中维护，
- * 服务台作为统一受理方需要能看到「收到的请求属于哪个预定义类别 / 会激活哪条流程」，
- * 因此这里以只读方式呈现类别对照，并提供跳转到自助服务办理的入口。
+ * 「预定义需求类别」= 服务目录项（catalogItems）：类别 / 名称 / 描述 / 动态界面字段 / 激活流程 / 可申请角色。
+ * 服务台既是统一受理方（按类别识别请求类型），也是类别的维护方：
+ * 本页右上「配置需求类别」打开配置抽屉，可新增 / 编辑 / 删除类别；
+ * 自助服务管理只做申请侧展示（类别定义 + 去申请），避免同一份配置两处维护。
  */
-const presetCategories = computed(() => (store.table('catalogItems') as any[]).map(i => {
-  const flow = (store.table('workflows') as any[]).find(w => w.id === i.flowId)
+const catalogItems = computed(() => store.table('catalogItems') as any[])
+const workflows = computed(() => store.table('workflows') as any[])
+const flowNameOf = (id: string) => workflows.value.find(w => w.id === id)?.name ?? id
+const presetCategories = computed(() => catalogItems.value.map(i => {
   const fields = arrAny(i.formSchema)
-  const kind = i.category === '故障申诉' ? '事件单' : i.category === '权限服务' ? '能力申请单' : '需求单'
+  const kind = ticketKindOf(i.category)
   return {
     id: i.id,
     name: i.name,
@@ -140,7 +144,8 @@ const presetCategories = computed(() => (store.table('catalogItems') as any[]).m
     desc: i.desc,
     fieldCount: fields.length,
     requiredCount: fields.filter((s: any) => s.required).length,
-    flowName: flow?.name ?? i.flowId,
+    flowName: flowNameOf(i.flowId),
+    roles: arrAny(i.allowedRoles).map((id: string) => store.roles.find(r => r.id === id)?.name ?? id),
     kind
   }
 }))
@@ -149,6 +154,137 @@ function categoryOfDemand(d: any): string {
   const title = String(d?.title ?? '')
   const hit = presetCategories.value.find(c => title.includes(c.name))
   return hit ? hit.name : (d?.kind === 'NEW' ? '新增数据需求' : '数据资源申请')
+}
+
+/* ---------------------------------------- 类别配置抽屉（新增 / 编辑 / 删除） -- */
+const canConfigCatalog = computed(() => store.can('service.catalog.config'))
+const catDrawer = ref(false)
+const catEditing = ref(false)
+const catEditId = ref('')
+/** 编辑草稿：新增时 id 为空；保存时整体写回服务目录项 */
+const catForm = reactive<{ category: string; name: string; desc: string; flowId: string; allowedRoles: string[]; formSchema: any[] }>({
+  category: '数据服务', name: '', desc: '', flowId: '', allowedRoles: [], formSchema: []
+})
+const FIELD_TYPES = [
+  { value: 'text', label: '单行文本' },
+  { value: 'textarea', label: '多行文本' },
+  { value: 'select', label: '下拉选择' },
+  { value: 'search', label: '搜索选择' },
+  { value: 'number', label: '数字' },
+  { value: 'date', label: '日期' }
+]
+/** 可选的类别分组：既有取值 + 三个预置类别（9.6 的「故障 / 服务申请」两大类） */
+const categoryOptions = computed(() => Array.from(new Set([
+  ...catalogItems.value.map(i => String(i.category)), '数据服务', '故障申诉', '权限服务'
+])))
+
+function openCategoryDrawer() {
+  if (!canConfigCatalog.value) {
+    ElMessage.warning(`当前角色「${store.role.name}」无「服务目录与类别配置」权限，无法配置预定义需求类别`)
+    return
+  }
+  catEditing.value = false
+  catDrawer.value = true
+}
+function newCategory() {
+  catEditId.value = ''
+  Object.assign(catForm, {
+    category: categoryOptions.value[0] ?? '数据服务', name: '', desc: '',
+    flowId: workflows.value[0]?.id ?? '', allowedRoles: ['consumer'],
+    formSchema: [{ key: '', label: '', type: 'text', required: true }]
+  })
+  catEditing.value = true
+}
+function editCategory(row: any) {
+  const rec = store.findById('catalogItems', row.id)
+  if (!rec) { ElMessage.warning('该类别已不存在，请刷新后重试'); return }
+  catEditId.value = rec.id
+  Object.assign(catForm, {
+    category: rec.category, name: rec.name, desc: rec.desc, flowId: rec.flowId,
+    allowedRoles: [...arrAny(rec.allowedRoles)],
+    formSchema: arrAny(rec.formSchema).map((s: any) => ({ ...s, options: s.options ? [...s.options] : undefined }))
+  })
+  catEditing.value = true
+}
+function cancelCategoryEdit() { catEditing.value = false; catEditId.value = '' }
+function addField() { catForm.formSchema.push({ key: '', label: '', type: 'text', required: true }) }
+function removeField(i: number) { catForm.formSchema.splice(i, 1) }
+function moveField(i: number, delta: number) {
+  const t = i + delta
+  if (t < 0 || t >= catForm.formSchema.length) return
+  const [row] = catForm.formSchema.splice(i, 1)
+  catForm.formSchema.splice(t, 0, row)
+}
+/** 下拉字段的选项：编辑态用「、」分隔的文本，保存时拆成数组 */
+function optionsText(s: any) { return arrAny(s.options).join('、') }
+function setOptions(s: any, text: string) {
+  s.options = String(text).split(/[、,，]/).map(t => t.trim()).filter(Boolean)
+}
+
+function saveCategory() {
+  if (!canConfigCatalog.value) {
+    ElMessage.warning(`当前角色「${store.role.name}」无「服务目录与类别配置」权限，无法保存`)
+    return
+  }
+  const category = String(catForm.category ?? '').trim()
+  const name = String(catForm.name ?? '').trim()
+  const desc = String(catForm.desc ?? '').trim()
+  if (!category) { ElMessage.warning('请填写类别名称'); return }
+  if (!name) { ElMessage.warning('请填写需求类别名称'); return }
+  if (!desc) { ElMessage.warning('请填写需求类别描述'); return }
+  if (!catForm.flowId) { ElMessage.warning('请选择该类别激活的处理流程'); return }
+  const fields = arrAny(catForm.formSchema)
+  if (!fields.length) { ElMessage.warning('至少需要保留 1 个界面字段'); return }
+  const keys = new Set<string>()
+  for (const s of fields) {
+    const k = String(s.key ?? '').trim()
+    const label = String(s.label ?? '').trim()
+    if (!k || !label) { ElMessage.warning('界面字段的「字段标识」与「字段名称」都不能为空'); return }
+    if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(k)) { ElMessage.warning(`字段标识「${k}」只能以字母开头，且只含字母 / 数字 / 下划线`); return }
+    if (keys.has(k)) { ElMessage.warning(`字段标识「${k}」重复，请换一个`); return }
+    keys.add(k)
+    if (s.type === 'select' && !arrAny(s.options).length) { ElMessage.warning(`下拉字段「${label}」至少需要 1 个选项（用「、」分隔）`); return }
+  }
+  const patch = {
+    category, name, desc, flowId: catForm.flowId,
+    allowedRoles: [...arrAny(catForm.allowedRoles)],
+    formSchema: fields.map(s => ({
+      key: String(s.key).trim(), label: String(s.label).trim(), type: s.type, required: !!s.required,
+      ...(s.type === 'select' ? { options: arrAny(s.options) } : {})
+    }))
+  }
+  if (catEditId.value) {
+    const rec = store.findById('catalogItems', catEditId.value)
+    if (!rec) { ElMessage.warning('该类别已不存在，请刷新后重试'); cancelCategoryEdit(); return }
+    store.update('catalogItems', catEditId.value, patch, { action: '配置需求类别', remark: patch.name })
+    ElMessage.success(`已保存「${patch.name}」，自助服务管理的类别表与申请表单已同步更新`)
+  } else {
+    const rec = store.insert('catalogItems', {
+      name: patch.name, category: patch.category, icon: 'Grid', banner: '', desc: patch.desc,
+      introHtml: '', availability: '99.9%', serviceTime: '7×24 小时',
+      flowId: patch.flowId, allowedRoles: patch.allowedRoles, formSchema: patch.formSchema
+    })
+    // insert 不写审计，这里补一条，保证新增类别同样可追溯
+    // （addAudit 只改内存，需显式 persist，否则刷新前这条留痕不在 localStorage 里）
+    store.addAudit({
+      bizType: 'catalogItems', bizId: rec.id, bizNo: rec.id, bizTitle: rec.name,
+      action: '新增需求类别', remark: `${patch.category} · 生成${ticketKindOf(patch.category)}`
+    })
+    store.persist()
+    ElMessage.success(`已新增类别「${patch.name}」，自助服务管理中立即可申请`)
+  }
+  cancelCategoryEdit()
+}
+function removeCategory(row: any) {
+  if (!canConfigCatalog.value) { ElMessage.warning(`当前角色「${store.role.name}」无「服务目录与类别配置」权限，无法删除`); return }
+  ElMessageBox.confirm(
+    `确认删除预定义需求类别「${row.name}」？删除后自助服务管理不再展示该类别，已生成的历史单据不受影响。`,
+    '删除需求类别', { confirmButtonText: '确认删除', cancelButtonText: '取消', type: 'warning' }
+  ).then(() => {
+    if (catEditId.value === row.id) cancelCategoryEdit()
+    store.remove('catalogItems', row.id, { bizType: 'catalogItems', remark: row.name })
+    ElMessage.success(`已删除类别「${row.name}」`)
+  }).catch(() => { /* 取消 */ })
 }
 
 /** 事件分类 → 自动分派组（按分类自动分派） */
@@ -249,6 +385,7 @@ function requesterOrg(i: any): string {
   const actor = String(arrAny(i?.timeline)[0]?.actor ?? '')
   const u = (store.table('users') as any[]).find(x => x.name === actor)
   if (u) return u.org
+  if (actor === store.user.name) return store.user.org   // 登录账号不在演示人员名录内
   if (/服务台|邮箱/.test(actor)) return '三医数据底座服务台'
   if (/系统|网关/.test(actor)) return '平台运营中心'
   return '其他来源'
@@ -641,11 +778,18 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
         <div class="card__title">预定义需求类别（{{ presetCategories.length }} 类）</div>
         <div class="card__sub">统一受理时按预定义类别识别请求类型：不同类别展现不同界面、要求不同信息、激活不同处理流程</div>
         <div class="card__spacer" />
+        <el-button size="small" type="primary" :disabled="!canConfigCatalog" @click="openCategoryDrawer">
+          <el-icon><Setting /></el-icon> 配置需求类别
+        </el-button>
         <el-button size="small" @click="router.push('/selfservice')">
-          <el-icon><Grid /></el-icon> 去自助服务管理配置
+          <el-icon><Grid /></el-icon> 去自助服务管理查看
         </el-button>
       </div>
       <div class="card__body card__body--flush">
+        <div v-if="!canConfigCatalog" class="text-xs muted" style="padding: 10px var(--sp-5) 0">
+          当前角色「{{ store.role.name }}」无「服务目录与类别配置」权限，<b>配置需求类别</b> 已置灰（配置需服务台受理员或平台管理员）；
+          本页仍可核对类别与激活流程。
+        </div>
         <el-table :data="presetCategories" size="small" style="width: 100%" row-key="id">
           <el-table-column label="类别" width="96">
             <template #default="{ row }"><StatusTag :label="row.category" tone="primary" :dot="false" /></template>
@@ -668,10 +812,20 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
           <el-table-column label="生成单据" width="110">
             <template #default="{ row }"><StatusTag :label="row.kind" tone="teal" :dot="false" /></template>
           </el-table-column>
+          <el-table-column label="可申请角色" min-width="180">
+            <template #default="{ row }"><span class="text-xs muted">{{ row.roles.join('、') || '—' }}</span></template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" :disabled="!canConfigCatalog" @click="editCategory(row)">编辑</el-button>
+              <el-button link type="danger" size="small" :disabled="!canConfigCatalog" @click="removeCategory(row)">删除</el-button>
+            </template>
+          </el-table-column>
         </el-table>
         <div class="text-xs muted" style="padding: 10px var(--sp-5)">
-          入口说明：「预定义需求类别」的配置与申请入口在 <b>服务窗口与度量 → 自助服务管理</b>（服务目录 / 预定义需求类别卡片）；
-          服务台管理页只做统一受理与类别核对，避免同一份配置在两处维护产生歧义。
+          入口说明：「预定义需求类别」的配置入口在本页右上角 <b>「配置需求类别」</b>（新增 / 编辑 / 删除类别、描述、界面字段与激活流程，
+          保存后自助服务管理同步生效）；自助服务管理只做申请侧展示（类别定义 + 去申请），避免同一份配置在两处维护产生歧义。
+          服务目录的「谁能申请哪个服务」在 <b>综合 → 系统配置 → 角色与权限</b> 的服务目录权限矩阵中维护。
         </div>
       </div>
     </div>
@@ -954,6 +1108,134 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
         <el-button type="primary" @click="submitCallback">提交反馈</el-button>
       </template>
     </el-dialog>
+
+    <!-- ====================== 预定义需求类别配置抽屉（9.6） -- -->
+    <el-drawer v-model="catDrawer" title="预定义需求类别配置" size="860px">
+      <div class="drawer-body">
+        <div class="text-sm muted mb-3">
+          维护「故障与服务申请」的预定义类别：<b>类别 → 名称 / 描述 → 动态界面字段 → 激活的处理流程 → 可申请角色</b>。
+          保存后自助服务管理的类别表与申请抽屉同步生效；「生成单据」由类别推导，无需单独配置。
+        </div>
+
+        <!-- 类别清单 -->
+        <div class="flex items-center gap-2 mb-2">
+          <div class="bold">类别清单（{{ presetCategories.length }} 类）</div>
+          <span class="card__spacer" />
+          <el-button size="small" type="primary" @click="newCategory"><el-icon><Plus /></el-icon> 新增类别</el-button>
+        </div>
+        <el-table :data="presetCategories" size="small" style="width: 100%" row-key="id" class="mb-4">
+          <el-table-column label="类别" width="92">
+            <template #default="{ row }"><StatusTag :label="row.category" tone="primary" :dot="false" /></template>
+          </el-table-column>
+          <el-table-column label="预定义需求类别" min-width="170">
+            <template #default="{ row }">
+              <div class="bold">{{ row.name }}</div>
+              <div class="cell-sub">{{ row.desc }}</div>
+            </template>
+          </el-table-column>
+          <el-table-column label="界面字段" width="120">
+            <template #default="{ row }">{{ row.fieldCount }} 个（{{ row.requiredCount }} 必填）</template>
+          </el-table-column>
+          <el-table-column label="激活流程" min-width="170">
+            <template #default="{ row }">{{ row.flowName }}</template>
+          </el-table-column>
+          <el-table-column label="生成单据" width="96">
+            <template #default="{ row }"><StatusTag :label="row.kind" tone="teal" :dot="false" /></template>
+          </el-table-column>
+          <el-table-column label="操作" width="112" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" size="small" @click="editCategory(row)">编辑</el-button>
+              <el-button link type="danger" size="small" @click="removeCategory(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <!-- 新增 / 编辑表单 -->
+        <div v-if="catEditing" class="card">
+          <div class="card__head">
+            <div class="card__title">{{ catEditId ? '编辑类别' : '新增类别' }}</div>
+            <div class="card__sub">类别与描述决定自助服务页的展示，界面字段决定申请时要求输入的信息，激活流程决定提交后走的审批规则</div>
+          </div>
+          <div class="card__body">
+            <el-form label-width="120px">
+              <el-form-item label="类别" required>
+                <el-select v-model="catForm.category" filterable allow-create default-first-option placeholder="选择或输入类别" style="width: 260px">
+                  <el-option v-for="c in categoryOptions" :key="c" :label="c" :value="c" />
+                </el-select>
+                <span class="text-xs muted" style="margin-left: 10px">生成单据：{{ ticketKindOf(catForm.category) }}</span>
+              </el-form-item>
+              <el-form-item label="需求类别名称" required>
+                <el-input v-model="catForm.name" placeholder="如：系统故障报修" style="width: 420px" />
+              </el-form-item>
+              <el-form-item label="类别描述" required>
+                <el-input v-model="catForm.desc" type="textarea" :rows="2" placeholder="一句话说明该类别适用于什么场景" />
+              </el-form-item>
+              <el-form-item label="激活流程" required>
+                <el-select v-model="catForm.flowId" placeholder="选择该类别激活的处理流程" style="width: 420px">
+                  <el-option v-for="w in workflows" :key="w.id" :label="`${w.name}（${w.bizType}）`" :value="w.id" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="可申请角色">
+                <el-checkbox-group v-model="catForm.allowedRoles">
+                  <el-checkbox v-for="r in store.roles" :key="r.id" :value="r.id">{{ r.name }}</el-checkbox>
+                </el-checkbox-group>
+              </el-form-item>
+              <el-form-item label="界面字段" required>
+                <div style="width: 100%">
+                  <table class="field-table">
+                    <thead>
+                      <tr>
+                        <th style="width: 150px">字段名称</th>
+                        <th style="width: 140px">字段标识</th>
+                        <th style="width: 130px">类型</th>
+                        <th style="width: 62px">必填</th>
+                        <th>选项（下拉用「、」分隔）</th>
+                        <th style="width: 130px">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(s, i) in catForm.formSchema" :key="i">
+                        <td><el-input v-model="s.label" size="small" placeholder="如：故障现象" /></td>
+                        <td><el-input v-model="s.key" size="small" placeholder="如：desc" /></td>
+                        <td>
+                          <el-select v-model="s.type" size="small">
+                            <el-option v-for="t in FIELD_TYPES" :key="t.value" :label="t.label" :value="t.value" />
+                          </el-select>
+                        </td>
+                        <td style="text-align: center"><el-checkbox v-model="s.required" /></td>
+                        <td>
+                          <el-input
+                            v-if="s.type === 'select'"
+                            :model-value="optionsText(s)"
+                            size="small"
+                            placeholder="如：数据缺失、口径不一致"
+                            @update:model-value="(v: string) => setOptions(s, v)"
+                          />
+                          <span v-else class="text-xs muted">—</span>
+                        </td>
+                        <td style="text-align: center">
+                          <el-button link size="small" @click="moveField(i, -1)">上移</el-button>
+                          <el-button link size="small" @click="moveField(i, 1)">下移</el-button>
+                          <el-button link type="danger" size="small" @click="removeField(i)">删除</el-button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <el-button size="small" class="mt-2" @click="addField"><el-icon><Plus /></el-icon> 添加字段</el-button>
+                  <div class="text-xs muted mt-2">
+                    类型说明：单行文本 / 多行文本 / 数字 / 日期直接录入；下拉选择需填选项；搜索选择按字段标识自动匹配资源、服务或应用数据源。
+                  </div>
+                </div>
+              </el-form-item>
+            </el-form>
+          </div>
+          <div class="card__foot">
+            <el-button @click="cancelCategoryEdit">取消</el-button>
+            <el-button type="primary" @click="saveCategory">保存</el-button>
+          </div>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -967,4 +1249,9 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
 }
 .chart-cell__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-bottom: var(--sp-2); flex-wrap: wrap; }
 .expand-box { padding: var(--sp-4) var(--sp-6); background: var(--surface-2); }
+/* 类别配置抽屉：界面字段编辑器 */
+.drawer-body { padding-bottom: var(--sp-6); }
+.field-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.field-table th, .field-table td { border: 1px solid var(--border-2); padding: 5px 8px; vertical-align: middle; }
+.field-table thead th { background: var(--surface-2); font-weight: 600; color: var(--text-2); font-size: var(--fs-xs); text-align: left; }
 </style>

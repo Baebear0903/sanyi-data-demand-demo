@@ -207,8 +207,8 @@ let deployTimer: ReturnType<typeof setInterval> | null = null
 const canDeploy = computed(() => store.can('flow.deploy'))
 
 /*
- * 部署日志时钟：以演示基准时间（NOW = 2026-01-27 10:30）为起点、按真实流逝时间递增。
- * 不使用真实系统时间，否则日志时间（如 16:20）会与部署记录时间（2026-01-27 10:30）自相矛盾。
+ * 部署日志时钟：以演示基准时间（NOW = 2026-08-31 10:30）为起点、按真实流逝时间递增。
+ * 不使用真实系统时间，否则日志时间（如 16:20）会与部署记录时间（2026-08-31 10:30）自相矛盾。
  */
 let deployClockBase = 0
 function nowTime() {
@@ -412,21 +412,21 @@ function openDeploy(d: any) {
 /* 存放在 store 的 deployRecords 表中：部署/重试后列表立即刷新，可点击「重试」复现失败场景 */
 const DEPLOY_SEED = [
   {
-    id: 'dep_seed_1', no: 'BS20260112001', demandId: 'd01', demandNo: 'XQ20260112001',
+    id: 'dep_seed_1', no: 'BS20260816001', demandId: 'd01', demandNo: 'XQ20260816001',
     demandTitle: '医保基金监管分析-门急诊费用与就诊明细申请',
-    operator: '赵敏', at: '2026-01-12 16:40', cost: '3.8 s', status: '成功', artifactCount: 5,
+    operator: '赵敏', at: '2026-08-16 16:40', cost: '3.8 s', status: '成功', artifactCount: 5,
     serviceKind: 'API', reason: ''
   },
   {
-    id: 'dep_seed_2', no: 'BS20260119002', demandId: 'd03', demandNo: 'XQ20260119003',
+    id: 'dep_seed_2', no: 'BS20260823002', demandId: 'd03', demandNo: 'XQ20260823003',
     demandTitle: '三医一张图-医疗资源与床位数据申请',
-    operator: '刘涛', at: '2026-01-19 15:20', cost: '4.1 s', status: '成功', artifactCount: 5,
+    operator: '刘涛', at: '2026-08-23 15:20', cost: '4.1 s', status: '成功', artifactCount: 5,
     serviceKind: 'FILE', reason: ''
   },
   {
-    id: 'dep_seed_3', no: 'BS20260121003', demandId: 'd05', demandNo: 'XQ20260118005',
+    id: 'dep_seed_3', no: 'BS20260825003', demandId: 'd05', demandNo: 'XQ20260822005',
     demandTitle: '医保支付方式改革评估-结算与住院数据申请',
-    operator: '赵敏', at: '2026-01-21 09:05', cost: '1.6 s', status: '失败', artifactCount: 0,
+    operator: '赵敏', at: '2026-08-25 09:05', cost: '1.6 s', status: '失败', artifactCount: 0,
     serviceKind: 'API', reason: '数据服务网关返回 503，路由注册超时（已自动回滚）'
   }
 ]

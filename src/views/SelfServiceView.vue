@@ -7,18 +7,20 @@
  *    从而大量降低进入服务台的请求，使运维工程师集中精力解决服务故障事件和恢复关键任务。
  *  · 服务目录（9.1）：向最终用户展示信息系统提供的服务内容、可用性、时间，确保清楚了解服务指标。
  *  · 服务产品（9.2）：通过图片、HTML、层次目录等方式友好展现服务目录内容，可通过搜索快速查找服务产品。
- *  · 权限管理（9.3）：根据权限定义当前用户可以使用的服务内容。
+ *  · 权限管理（9.3）：服务目录按各角色的可申请范围定义当前用户能使用的服务内容
+ *    （矩阵的查看 / 编辑入口在「综合 → 系统配置 → 角色与权限」，本页只呈现结果）。
  *  · WEB 提交需求（9.4）：基于 Web 的三医服务窗口，用户可填写故障申诉和服务申请。
  *  · 电子邮件提交需求（9.5）：支持用户通过电子邮件方式提交服务申请（邮件解析 → 自动建单）。
  *  · 预定义需求类别（9.6）：提供预定义故障与服务申请类别、描述；根据所选服务类型展现不同界面、
  *    要求输入相关信息、激活不同处理流程。
  */
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useDemoStore } from '@/stores/demo'
 import { config } from '@/core/config'
-import { addDays, iso, today, truncate } from '@/core/utils'
+import { ticketKindOf } from '@/core/serviceCatalog'
+import { addDays, iso, nowIsoOffset, today, truncate } from '@/core/utils'
 import PageHead from '@/components/PageHead.vue'
 import StatCards from '@/components/StatCards.vue'
 import StatusTag from '@/components/StatusTag.vue'
@@ -58,10 +60,39 @@ const stats = computed(() => {
   ]
 })
 
-/* ============================================ 9.1 / 9.2 服务目录 -- */
+/* ====================================== 9.1 服务目录 / 9.2 服务产品 -- */
+/**
+ * 两个功能点各用一屏承载：
+ *  · 服务目录：以清单形式展示服务内容、可用性、服务时间与服务指标（SLA 时限）
+ *  · 服务产品：以图片 + HTML 说明 + 层次目录（类别 → 产品）友好展现，并支持搜索
+ */
+const tab = ref<'catalog' | 'product'>('catalog')
 const f = reactive({ kw: '', category: '', onlyAvailable: false })
 
 const available = (item: any) => arrAny(item.allowedRoles).includes(store.role.id)
+/** 可申请角色名（服务目录的「可申请角色」列） */
+const roleNames = (ids: unknown) => arrAny(ids).map((id: string) => store.roles.find(r => r.id === id)?.name ?? id)
+
+/** 服务指标：激活流程各节点时限汇总出的端到端 SLA */
+function slaOf(flowId: string) {
+  const wf = workflows.value.find(w => w.id === flowId)
+  const nodes = arrAny(wf?.nodes).filter((n: any) => Number(n.slaHours) > 0)
+  const hours = nodes.map((n: any) => Number(n.slaHours || 0))
+  const total = hours.reduce((s: number, h: number) => s + h, 0)
+  return {
+    total,
+    count: nodes.length,
+    max: hours.length ? Math.max(...hours) : 0,
+    detail: nodes.map((n: any) => `${n.name} ${n.slaHours}h`).join(' → ')
+  }
+}
+
+/** 服务目录行：按类别 / 可用性筛选 */
+const catalogRows = computed(() => catalogItems.value.filter(i => {
+  if (f.category && i.category !== f.category) return false
+  if (f.onlyAvailable && !available(i)) return false
+  return true
+}))
 
 const filteredCatalog = computed(() => {
   const q = f.kw.trim().toLowerCase()
@@ -76,6 +107,17 @@ const filteredCatalog = computed(() => {
   })
 })
 
+/** 服务产品的层次目录：类别 → 服务产品 */
+const productGroups = computed(() => {
+  const groups: { category: string; items: any[] }[] = []
+  for (const item of filteredCatalog.value) {
+    const g = groups.find(x => x.category === item.category)
+    if (g) g.items.push(item)
+    else groups.push({ category: item.category, items: [item] })
+  }
+  return groups
+})
+
 /* ================================= 服务产品详情 / 动态表单 / 建单 -- */
 const drawer = ref(false)
 const current = ref<any>(null)
@@ -87,7 +129,7 @@ const currentFlow = computed(() => workflows.value.find(w => w.id === current.va
 function openItem(item: any) {
   if (!item) return
   if (!available(item)) {
-    ElMessage.warning(`当前角色「${store.role.name}」无权申请「${item.name}」，可在下方权限管理中切换角色体验`)
+    ElMessage.warning(`当前角色「${store.role.name}」无权申请「${item.name}」，如需申请请在顶栏账号区切换为有权限的身份`)
     return
   }
   current.value = item
@@ -127,11 +169,14 @@ function matchIncidentCategory(text: string): any {
  *  · 数据服务 → 需求单（激活数据需求申请 / 订阅审批流）
  *  · 故障申诉 → 事件单（按分类规则自动分派，激活事件升级与派发规则）
  *  · 权限服务 → 能力申请单（能力开放门户 · 能力申请，页面内已说明该映射关系）
+ *
+ * 「类别 → 单据类型」的映射取自 core/serviceCatalog.ts（唯一真源），此处只负责各类别的建单细节。
  */
 function createTicket(item: any, values: Record<string, any>, origin: 'SELF' | 'EMAIL') {
   const tag = origin === 'EMAIL' ? '邮件' : '自助服务'
+  const kind = ticketKindOf(item.category)
 
-  if (item.category === '故障申诉') {
+  if (kind === '事件单') {
     const text = `${item.name} ${values.desc ?? ''} ${values.problemType ?? ''} ${values.system ?? ''}`
     const cat = matchIncidentCategory(text)
     const sev: string = values.severity === '严重影响业务' ? '严重' : values.severity === '轻微影响' ? '低' : '中'
@@ -152,7 +197,7 @@ function createTicket(item: any, values: Record<string, any>, origin: 'SELF' | '
     return { kind: 'incident', no, route: `/incident/detail/${rec.id}`, text: `已生成事件单 ${no}，已自动分派至${cat.autoAssign}` }
   }
 
-  if (item.category === '权限服务') {
+  if (kind === '能力申请单') {
     const no = nextNo('NL', 'capabilityApplies')
     const map: Record<string, string> = { 新建账号: '应用能力', 权限调整: '数据服务能力', 密钥补发: '数据库能力', 租户注册: '计算能力' }
     store.insert('capabilityApplies', {
@@ -182,7 +227,7 @@ function createTicket(item: any, values: Record<string, any>, origin: 'SELF' | '
     resources: values.resource ? [values.resource] : [], fields: [],
     timeRange: '', updateFreq: '按需', usePeriod: values.usePeriod || '12 个月', callVolume: Number(values.estCalls) || 0,
     desensitize: true, securityLevel: 'L2', priority: 'P2', status: 'PENDING_ACCEPT', currentHandler: '—',
-    source: origin === 'EMAIL' ? 'EMAIL' : 'SERVICE_DESK', templateId: null,
+    source: origin === 'EMAIL' ? 'EMAIL' : 'SELF', templateId: null,
     submittedAt: iso(), expectAt: values.expectAt || iso(addDays(today(), 10)),
     relatedIncidentIds: [], relatedProblemIds: [], taskIds: [], changeIds: [], subscriptionIds: [],
     evaluationId: null, approver: null, rejectReason: null,
@@ -215,125 +260,6 @@ function submitApply() {
   drawer.value = false
 }
 
-/* ==================================================== 9.3 权限管理 -- */
-function switchRole(id: string) {
-  if (store.role.id === id) return
-  store.setRole(id)
-  const r = store.roles.find(x => x.id === id)
-  ElMessage.success(`已切换为「${r?.name}」，服务目录可用项已按权限重新计算`)
-}
-const roleMatrix = computed(() => (store.table('roleMatrix') as any[]) ?? [])
-
-/**
- * 权限管理矩阵的「配置态」与「查看态」
- *  · 配置态（具备 selfservice.admin 权限，如平台管理员）：勾选框可编辑，勾选/取消即调整该角色可申请的服务内容，
- *    保存后写回服务目录项并留痕；取消全部勾选等价于该角色不可见 / 不可申请该服务。
- *  · 查看态（其他角色）：以 ✓ / — 展示当前角色的可用服务内容，切换角色可对比差异。
- *    原实现只有查看态，导致「无法勾选角色权限」，因此这里补齐编辑能力。
- */
-const canEditMatrix = computed(() => store.can('selfservice.admin'))
-const editingMatrix = ref(false)
-/** 编辑态草稿：{ 服务目录项 id: 角色 id[] }，保存前不落库 */
-const draftRoles = ref<Record<string, string[]>>({})
-
-const matrixDirty = computed(() => {
-  if (!editingMatrix.value) return false
-  return catalogItems.value.some(i => {
-    const before = [...arrAny(i.allowedRoles)].sort().join(',')
-    const after = [...(draftRoles.value[i.id] ?? [])].sort().join(',')
-    return before !== after
-  })
-})
-
-function startEditMatrix() {
-  if (!canEditMatrix.value) {
-    ElMessage.warning(`当前角色「${store.role.name}」无「自助服务与类别配置」权限，无法调整权限矩阵（请切换为平台管理员）`)
-    return
-  }
-  const draft: Record<string, string[]> = {}
-  catalogItems.value.forEach(i => { draft[i.id] = [...arrAny(i.allowedRoles)] })
-  draftRoles.value = draft
-  editingMatrix.value = true
-  ElMessage.info('已进入编辑态：勾选 / 取消勾选后点「保存权限配置」生效')
-}
-function cancelEditMatrix() {
-  editingMatrix.value = false
-  draftRoles.value = {}
-}
-function toggleMatrix(roleId: string, itemId: string) {
-  const cur = draftRoles.value[itemId] ?? []
-  draftRoles.value = {
-    ...draftRoles.value,
-    [itemId]: cur.includes(roleId) ? cur.filter(r => r !== roleId) : [...cur, roleId]
-  }
-}
-/**
- * 编辑态与「自助服务与类别配置」权限绑定：切换角色即退出编辑态并作废草稿。
- * 进入编辑态只在点击时校验一次权限，若编辑态跨角色切换继续存在，
- * 无该权限的角色就能沿用别人的编辑态继续勾选并保存（越权改权限矩阵）。
- */
-watch(() => store.roleId, () => {
-  if (!editingMatrix.value) return
-  editingMatrix.value = false
-  draftRoles.value = {}
-  if (!canEditMatrix.value) {
-    ElMessage.warning(`已切换为「${store.role.name}」，该角色无「自助服务与类别配置」权限，编辑态已退出、未保存的调整已作废`)
-  }
-})
-/** 保存：把草稿写回服务目录项（allowedRoles），并写审计留痕 */
-function saveMatrix() {
-  // 落库前复核权限：编辑态可能是在具备权限的角色下进入的，而当前角色未必仍有权限
-  if (!canEditMatrix.value) {
-    editingMatrix.value = false
-    draftRoles.value = {}
-    ElMessage.warning(`当前角色「${store.role.name}」无「自助服务与类别配置」权限，无法保存权限配置（请切换为平台管理员）`)
-    return
-  }
-  if (!matrixDirty.value) { ElMessage.info('权限配置没有变化'); editingMatrix.value = false; return }
-  let changed = 0
-  const detail: string[] = []
-  for (const item of catalogItems.value) {
-    const before = [...arrAny(item.allowedRoles)].sort()
-    const after = [...(draftRoles.value[item.id] ?? [])].sort()
-    if (before.join(',') === after.join(',')) continue
-    changed++
-    const nameOf = (id: string) => store.roles.find(r => r.id === id)?.name ?? id
-    detail.push(`${item.name}：${after.map(nameOf).join('、') || '（无角色可申请）'}`)
-    store.update('catalogItems', item.id, { allowedRoles: [...(draftRoles.value[item.id] ?? [])] }, {
-      action: '调整服务权限', remark: `${item.name} 可申请角色 → ${after.map(nameOf).join('、') || '（无）'}`
-    })
-  }
-  editingMatrix.value = false
-  draftRoles.value = {}
-  ElMessage.success(`已保存 ${changed} 个服务目录项的权限配置，服务目录可用项已同步刷新`)
-  store.notify({
-    type: 'info', title: '自助服务权限矩阵已更新',
-    body: `共调整 ${changed} 个服务目录项的可申请角色：${detail.slice(0, 3).join('；')}${detail.length > 3 ? ' 等' : ''}`,
-    toRoles: ['desk', 'supplier', 'consumer'], link: '/selfservice'
-  })
-}
-/** 恢复出厂默认（种子数据的 allowedRoles） */
-function resetMatrix() {
-  ElMessageBox.confirm('将把权限矩阵恢复为出厂默认配置，是否继续？', '恢复默认权限', {
-    confirmButtonText: '恢复默认', cancelButtonText: '取消', type: 'warning'
-  }).then(() => {
-    const defaults: Record<string, string[]> = {
-      sc01: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin'],
-      sc02: ['consumer', 'supplier', 'desk', 'admin'],
-      sc03: ['consumer', 'supplier', 'desk', 'admin'],
-      sc04: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin'],
-      sc05: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin'],
-      sc06: ['consumer', 'supplier', 'desk', 'ops', 'producer', 'admin']
-    }
-    for (const item of catalogItems.value) {
-      const d = defaults[item.id]
-      if (d) store.update('catalogItems', item.id, { allowedRoles: [...d] }, { action: '恢复默认服务权限', remark: item.name })
-    }
-    if (editingMatrix.value) startEditMatrix()
-    ElMessage.success('已恢复出厂默认权限配置')
-  }).catch(() => { /* 取消 */ })
-}
-
 /* ============================================ 9.6 预定义需求类别 -- */
 /**
  * 预定义需求类别 = 服务目录项（名称 / 描述 / 动态表单字段 / 激活流程）。
@@ -342,7 +268,7 @@ function resetMatrix() {
  */
 const categoryMapping = computed(() => catalogItems.value.map(i => {
   const flow = workflows.value.find(w => w.id === i.flowId)
-  const kind = i.category === '故障申诉' ? '事件单' : i.category === '权限服务' ? '能力申请单' : '需求单'
+  const kind = ticketKindOf(i.category)
   return {
     id: i.id,
     name: i.name,
@@ -374,19 +300,19 @@ const mails = ref<Mail[]>([
     id: 'ml01', from: 'wuq@yjj.sanyi-data.cn（市药品监督管理局 吴强）',
     subject: '【服务申请】申请开通药品不良反应监测数据接口',
     body: '服务台您好：\n我局药品流通追溯分析应用需要接入药品不良反应监测数据，用于不良反应聚集性信号分析。\n期望交付方式：接口；使用期限：12 个月；使用范围限本局应用。\n请协助开通，谢谢。',
-    at: '2026-01-27 08:42', parsed: false
+    at: nowIsoOffset(0, -2), parsed: false
   },
   {
     id: 'ml02', from: 'zhengx@cdc.sanyi-data.cn（市疾控中心 郑晓）',
     subject: '【故障报修】传染病报告实时推送服务连接中断',
     body: '今日 07:30 起，传染病监测预警应用无法接收到实时推送数据，客户端提示连接超时。\n影响：传染病监测预警页面数据不更新。\n请尽快排查，谢谢。',
-    at: '2026-01-27 09:05', parsed: false
+    at: nowIsoOffset(0, -1), parsed: false
   },
   {
     id: 'ml03', from: 'mach@hospital.sanyi-data.cn（北京大学第三医院 马超）',
     subject: '【服务申请】申请开通数据沙箱账号与权限',
     body: '我院科研课题需在数据沙箱内使用脱敏后的门急诊数据开展研究，申请新建账号并开通数据沙箱权限。\n申请人：马超；所属单位：北京大学第三医院。\n请协助办理。',
-    at: '2026-01-27 09:36', parsed: false
+    at: nowIsoOffset(0, 0), parsed: false
   }
 ])
 const activeMail = ref<Mail>(mails.value[0])
@@ -414,6 +340,7 @@ function parseCategory(text: string): any {
 
 function parseMail(mail: Mail) {
   if (mail.parsed) { ElMessage.info('该邮件已解析建单'); return }
+  if (!catalogItems.value.length) { ElMessage.warning('尚未配置预定义需求类别，请先到「服务台管理 → 预定义需求类别」完成配置'); return }
   const item = parseCategory(`${mail.subject} ${mail.body}`)
   const values: Record<string, any> = {
     scene: truncate(mail.body, 120),
@@ -442,7 +369,7 @@ function parseMail(mail: Mail) {
     >
       <template #actions>
         <el-button @click="router.push('/service-desk')">前往服务台</el-button>
-        <el-button type="primary" @click="openItem(catalogItems[0])"><el-icon><Plus /></el-icon> Web 提交需求</el-button>
+        <el-button type="primary" :disabled="!catalogItems.length" @click="openItem(catalogItems[0])"><el-icon><Plus /></el-icon> Web 提交需求</el-button>
       </template>
     </PageHead>
 
@@ -461,154 +388,129 @@ function parseMail(mail: Mail) {
       </template>
     </el-alert>
 
-    <!-- ==================================================== 服务目录 -- -->
+    <!-- ============================ 服务目录（服务指标）/ 服务产品（图文） -- -->
     <div class="card">
-      <div class="card__head">
-        <div class="card__title">服务目录 / 服务产品</div>
-        <div class="card__sub">共 {{ filteredCatalog.length }} / {{ catalogItems.length }} 项 · 当前角色：{{ store.role.name }}</div>
-        <div class="card__spacer" />
-        <el-input v-model="f.kw" placeholder="搜索服务产品（名称 / 描述 / 类别）" clearable style="width: 250px" size="small">
-          <template #prefix><el-icon><Search /></el-icon></template>
-        </el-input>
-        <el-select v-model="f.category" placeholder="全部类别" clearable size="small" style="width: 140px">
-          <el-option v-for="c in categories" :key="c" :label="c" :value="c" />
-        </el-select>
-        <el-checkbox v-model="f.onlyAvailable" size="small">仅看我可用</el-checkbox>
-      </div>
-      <div class="card__body">
-        <div v-if="filteredCatalog.length" class="svc-grid">
-          <div
-            v-for="item in filteredCatalog"
-            :key="item.id"
-            class="svc-card"
-            :class="{ 'svc-card--off': !available(item) }"
-            @click="openItem(item)"
-          >
-            <div class="svc-card__banner" :class="item.banner ? `svc-card__banner--${item.banner}` : ''">
-              <el-icon :size="22"><component :is="svcIcon(item)" /></el-icon>
-            </div>
-            <div class="svc-card__body">
-              <div class="flex items-center justify-between gap-2">
-                <span class="svc-card__title">{{ item.name }}</span>
-                <StatusTag :label="item.category" tone="info" :dot="false" />
+      <div class="card__body" style="padding-bottom: 0">
+        <el-tabs v-model="tab">
+          <!-- ------------------------------ 服务目录：内容 / 可用性 / 时间 ------------------------------ -->
+          <el-tab-pane label="服务目录" name="catalog">
+            <div class="flex items-center justify-between wrap gap-2 mb-3">
+              <div class="flex items-center gap-2 wrap">
+                <el-select v-model="f.category" placeholder="全部类别" clearable size="small" style="width: 150px">
+                  <el-option v-for="c in categories" :key="c" :label="c" :value="c" />
+                </el-select>
+                <el-checkbox v-model="f.onlyAvailable" size="small">仅看我可用</el-checkbox>
               </div>
-              <div class="svc-card__desc">{{ item.desc }}</div>
-              <div class="svc-card__meta">
-                <span>可用性 <b class="mono">{{ item.availability }}</b></span>
-                <span>服务时间 <b>{{ item.serviceTime }}</b></span>
-              </div>
-              <div class="svc-card__meta">
-                <span>流程 <b>{{ flowName(item.flowId) }}</b></span>
-              </div>
-              <div v-if="!available(item)" class="lock-tip"><el-icon><Lock /></el-icon> 当前角色无权申请</div>
+              <span class="text-xs muted">共 {{ catalogRows.length }} / {{ catalogItems.length }} 项服务 · 当前角色：{{ store.role.name }}</span>
             </div>
-            <div class="svc-card__foot">
-              <el-button size="small" type="primary" :disabled="!available(item)" @click.stop="openItem(item)">立即申请</el-button>
-              <span class="text-xs muted">{{ arrAny(item.formSchema).length }} 个字段 · {{ arrAny(item.allowedRoles).length }} 类角色可用</span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="empty-box">
-          <div class="empty-box__icon"><el-icon><DocumentRemove /></el-icon></div>
-          <div class="empty-box__text">没有符合条件的服务产品，请调整搜索条件</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================================================== 权限管理 -- -->
-    <div class="card">
-      <div class="card__head">
-        <div class="card__title">权限管理</div>
-        <div class="card__sub">根据权限定义当前用户可以使用的服务内容（9.3）：行为服务目录项，列为角色，勾选表示该角色可申请</div>
-        <div class="card__spacer" />
-        <template v-if="!editingMatrix">
-          <el-button size="small" type="primary" plain :disabled="!canEditMatrix" @click="startEditMatrix">
-            <el-icon><EditPen /></el-icon> 编辑权限配置
-          </el-button>
-          <el-button size="small" @click="resetMatrix" :disabled="!canEditMatrix">恢复默认</el-button>
-        </template>
-        <template v-else>
-          <StatusTag label="编辑中（未保存）" :tone="matrixDirty ? 'warning' : 'info'" :dot="false" />
-          <el-button size="small" @click="cancelEditMatrix">取消</el-button>
-          <el-button size="small" type="primary" @click="saveMatrix">保存权限配置</el-button>
-        </template>
-      </div>
-      <div class="card__body">
-        <div class="role-switch">
-          <span class="text-xs muted">切换角色对比可用服务：</span>
-          <el-button
-            v-for="r in store.roles"
-            :key="r.id"
-            size="small"
-            :type="store.role.id === r.id ? 'primary' : 'default'"
-            @click="switchRole(r.id)"
-          >{{ r.name }}</el-button>
-        </div>
-        <div v-if="!canEditMatrix" class="matrix-tip">
-          <el-icon><InfoFilled /></el-icon>
-          当前角色「{{ store.role.name }}」为查看态：矩阵以 ✓ / — 展示各角色可申请的服务内容。
-          如需调整勾选，请切换到 <b>平台管理员</b>（具备「自助服务与类别配置」权限）后点「编辑权限配置」。
-        </div>
-        <div v-else-if="!editingMatrix" class="matrix-tip matrix-tip--ok">
-          <el-icon><InfoFilled /></el-icon>
-          当前角色「{{ store.role.name }}」具备「自助服务与类别配置」权限：点右上角 <b>「编辑权限配置」</b> 即可勾选 / 取消勾选各角色可申请的服务内容，保存后立即生效。
-        </div>
-        <div v-else class="matrix-tip matrix-tip--edit">
-          <el-icon><EditPen /></el-icon>
-          编辑态：点击单元格勾选 / 取消勾选，调整该角色可申请的服务内容；<b>保存权限配置</b>后立即生效（服务目录可用项、服务卡「立即申请」按钮同步刷新）。
-        </div>
-
-        <table class="matrix">
-          <thead>
-            <tr>
-              <th style="min-width: 190px">服务目录项</th>
-              <th v-for="r in store.roles" :key="r.id">
-                <span :class="{ bold: store.role.id === r.id }">{{ r.name }}</span>
-              </th>
-              <th>类别</th>
-              <th>激活流程</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in catalogItems" :key="item.id">
-              <td><el-icon><component :is="svcIcon(item)" /></el-icon> {{ item.name }}</td>
-              <td v-for="r in store.roles" :key="r.id">
-                <template v-if="editingMatrix">
-                  <el-checkbox
-                    :model-value="(draftRoles[item.id] ?? []).includes(r.id)"
-                    @change="toggleMatrix(r.id, item.id)"
-                  />
+            <el-table :data="catalogRows" style="width: 100%" row-key="id" size="small">
+              <el-table-column label="服务名称" min-width="190">
+                <template #default="{ row }">
+                  <div class="flex items-center gap-2">
+                    <el-icon><component :is="svcIcon(row)" /></el-icon>
+                    <span class="bold">{{ row.name }}</span>
+                  </div>
+                  <div class="cell-sub">{{ flowName(row.flowId) }}</div>
                 </template>
-                <span v-else :class="arrAny(item.allowedRoles).includes(r.id) ? 'yes' : 'no'">
-                  <el-icon v-if="arrAny(item.allowedRoles).includes(r.id)"><Check /></el-icon>
-                  <span v-else>—</span>
-                </span>
-              </td>
-              <td>{{ item.category }}</td>
-              <td class="text-xs muted">{{ flowName(item.flowId) }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="text-xs muted mt-3">
-          当前角色「{{ store.role.name }}」可申请 <b>{{ catalogItems.filter(available).length }}</b> / {{ catalogItems.length }} 项服务；
-          切换角色后，不可用项会置灰并标注「当前角色无权申请」。
-          <template v-if="editingMatrix">编辑态下正在调整该矩阵，保存前不影响服务目录。</template>
-        </div>
-        <el-collapse class="mt-3">
-          <el-collapse-item title="建设方案中的 14 类角色与职责（参考）" name="rm">
-            <table class="matrix">
-              <thead><tr><th>角色</th><th>所属组织</th><th>职责</th><th>职责依据</th></tr></thead>
-              <tbody>
-                <tr v-for="r in roleMatrix" :key="r.name">
-                  <td>{{ r.name }}</td>
-                  <td>{{ r.org }}</td>
-                  <td style="text-align: left">{{ r.duty }}</td>
-                  <td class="text-xs muted" style="text-align: left">{{ r.spec }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </el-collapse-item>
-        </el-collapse>
+              </el-table-column>
+              <el-table-column label="服务内容" min-width="240">
+                <template #default="{ row }">
+                  <el-tooltip :content="row.desc" placement="top">
+                    <div>{{ row.desc }}</div>
+                  </el-tooltip>
+                  <div class="cell-sub">{{ arrAny(row.formSchema).length }} 个申请字段</div>
+                </template>
+              </el-table-column>
+              <el-table-column label="类别" width="100">
+                <template #default="{ row }"><StatusTag :label="row.category" tone="info" :dot="false" /></template>
+              </el-table-column>
+              <el-table-column label="可用性" width="92">
+                <template #default="{ row }"><span class="mono">{{ row.availability }}</span></template>
+              </el-table-column>
+              <el-table-column prop="serviceTime" label="服务时间" width="152" />
+              <el-table-column label="服务指标（SLA 时限）" min-width="200">
+                <template #default="{ row }">
+                  <div>端到端 <b class="mono">{{ slaOf(row.flowId).total }}</b> 小时</div>
+                  <el-tooltip :content="slaOf(row.flowId).detail" placement="top">
+                    <div class="cell-sub">{{ slaOf(row.flowId).count }} 个环节 · 单环节最长 {{ slaOf(row.flowId).max }}h</div>
+                  </el-tooltip>
+                </template>
+              </el-table-column>
+              <el-table-column label="可申请角色" min-width="150">
+                <template #default="{ row }">
+                  <el-tooltip :content="roleNames(row.allowedRoles).join('、')" placement="top">
+                    <div class="text-xs muted">{{ roleNames(row.allowedRoles).length }} 类角色可申请</div>
+                  </el-tooltip>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="100" fixed="right">
+                <template #default="{ row }">
+                  <el-button size="small" type="primary" :disabled="!available(row)" @click="openItem(row)">立即申请</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+
+          <!-- --------------------- 服务产品：图片 / HTML / 层次目录 + 搜索 --------------------- -->
+          <el-tab-pane label="服务产品" name="product">
+            <div class="flex items-center justify-between wrap gap-2 mb-3">
+              <div class="flex items-center gap-2 wrap">
+                <el-input v-model="f.kw" placeholder="搜索服务产品（名称 / 描述 / 类别）" clearable style="width: 260px" size="small">
+                  <template #prefix><el-icon><Search /></el-icon></template>
+                </el-input>
+                <el-select v-model="f.category" placeholder="全部类别" clearable size="small" style="width: 150px">
+                  <el-option v-for="c in categories" :key="c" :label="c" :value="c" />
+                </el-select>
+                <el-checkbox v-model="f.onlyAvailable" size="small">仅看我可用</el-checkbox>
+              </div>
+              <span class="text-xs muted">共 {{ filteredCatalog.length }} / {{ catalogItems.length }} 项 · 当前角色：{{ store.role.name }}</span>
+            </div>
+            <template v-if="productGroups.length">
+              <div v-for="g in productGroups" :key="g.category" class="svc-group">
+                <div class="svc-group__head">
+                  <span class="svc-group__title">{{ g.category }}</span>
+                  <span class="text-xs muted">{{ g.items.length }} 项服务产品</span>
+                </div>
+                <div class="svc-grid">
+                  <div
+                    v-for="item in g.items"
+                    :key="item.id"
+                    class="svc-card"
+                    :class="{ 'svc-card--off': !available(item) }"
+                    @click="openItem(item)"
+                  >
+                    <div class="svc-card__banner" :class="item.banner ? `svc-card__banner--${item.banner}` : ''">
+                      <el-icon :size="22"><component :is="svcIcon(item)" /></el-icon>
+                    </div>
+                    <div class="svc-card__body">
+                      <div class="flex items-center justify-between gap-2">
+                        <span class="svc-card__title">{{ item.name }}</span>
+                        <StatusTag :label="item.category" tone="info" :dot="false" />
+                      </div>
+                      <div class="svc-card__desc">{{ item.desc }}</div>
+                      <div class="svc-card__meta">
+                        <span>可用性 <b class="mono">{{ item.availability }}</b></span>
+                        <span>服务时间 <b>{{ item.serviceTime }}</b></span>
+                      </div>
+                      <div class="svc-card__meta">
+                        <span>流程 <b>{{ flowName(item.flowId) }}</b></span>
+                      </div>
+                      <div v-if="!available(item)" class="lock-tip"><el-icon><Lock /></el-icon> 当前角色无权申请</div>
+                    </div>
+                    <div class="svc-card__foot">
+                      <el-button size="small" type="primary" :disabled="!available(item)" @click.stop="openItem(item)">立即申请</el-button>
+                      <span class="text-xs muted">{{ arrAny(item.formSchema).length }} 个字段 · {{ arrAny(item.allowedRoles).length }} 类角色可用</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <div v-else class="empty-box">
+              <div class="empty-box__icon"><el-icon><DocumentRemove /></el-icon></div>
+              <div class="empty-box__text">没有符合条件的服务产品，请调整搜索条件</div>
+            </div>
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </div>
 
@@ -727,6 +629,16 @@ function parseMail(mail: Mail) {
 
         <div class="card">
           <div class="card__head">
+            <div class="card__title">服务说明</div>
+            <div class="card__sub">服务范围、办理时限与注意事项</div>
+          </div>
+          <div class="card__body">
+            <div class="richtext" v-html="current.introHtml || `<p>${current.desc}</p>`" />
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card__head">
             <div class="card__title">激活的处理流程</div>
             <div class="card__sub">{{ currentFlow?.name }} · {{ currentFlow?.version }} · 业务类型：{{ currentFlow?.bizType }}</div>
           </div>
@@ -774,7 +686,7 @@ function parseMail(mail: Mail) {
               </el-form-item>
             </el-form>
             <div class="text-xs muted">
-              提交后按服务类别激活不同流程：<b>数据服务</b>生成需求单（来源「服务台申报」/「电子邮件」）；
+              提交后按服务类别激活不同流程：<b>数据服务</b>生成需求单（来源「客户自助」/「电子邮件」）；
               <b>故障申诉</b>生成事件单（来源「客户自助」/「邮件」，并按分类规则自动分派）；
               <b>权限服务</b>生成能力申请单（能力开放门户 · 能力申请，提交平台运营中心审核）。
             </div>
@@ -793,6 +705,23 @@ function parseMail(mail: Mail) {
 .svc-card { cursor: pointer; }
 .svc-card--off { opacity: .62; filter: grayscale(.55); cursor: not-allowed; }
 .svc-card--off:hover { transform: none; box-shadow: none; }
+/* 服务产品的层次目录：类别分组标题 */
+.svc-group + .svc-group { margin-top: var(--sp-5); }
+.svc-group__head {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding-bottom: var(--sp-2); margin-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--border-2);
+}
+.svc-group__title { font-size: var(--fs-lg); font-weight: 600; }
+/* 表格单元格副标题（与其余列表页保持一致的观感） */
+.cell-sub { font-size: var(--fs-xs); color: var(--text-3); margin-top: 2px; }
+/* 服务说明（HTML 富文本） */
+.richtext { font-size: var(--fs-md); line-height: 1.8; color: var(--text); }
+.richtext :deep(h3) { font-size: var(--fs-md); font-weight: 600; margin: var(--sp-3) 0 var(--sp-1); }
+.richtext :deep(p) { margin: var(--sp-2) 0; }
+.richtext :deep(ul), .richtext :deep(ol) { padding-left: 22px; margin: var(--sp-2) 0; }
+.richtext :deep(li) { margin: 2px 0; }
+.richtext :deep(img) { max-width: 100%; border-radius: var(--r-sm); }
 .lock-tip {
   margin-top: 6px; font-size: var(--fs-xs); color: var(--danger-fg);
   background: var(--danger-bg); border-radius: var(--r-sm); padding: 3px 8px; display: inline-block;
@@ -808,15 +737,6 @@ function parseMail(mail: Mail) {
 .mail-item__subject { font-size: var(--fs-sm); margin: 4px 0 2px; }
 .mail-preview { border: 1px solid var(--border-2); border-radius: var(--r-md); padding: var(--sp-4); background: var(--surface); }
 .drawer-body { padding-bottom: var(--sp-6); }
-.role-switch { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: var(--sp-3); }
-.matrix-tip {
-  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-  font-size: var(--fs-xs); color: var(--text-2);
-  background: var(--surface-2); border: 1px solid var(--border-2);
-  border-radius: var(--r-md); padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-3);
-}
-.matrix-tip--edit { background: var(--brand-50); border-color: var(--brand-200, var(--brand-400)); color: var(--brand-700, var(--brand-600)); }
-.matrix-tip--ok { background: var(--success-bg); border-color: var(--success); color: var(--success-fg); }
 .prod-head { display: flex; gap: var(--sp-4); align-items: flex-start; margin-bottom: var(--sp-4); }
 .prod-head__icon {
   width: 52px; height: 52px; flex: none; border-radius: var(--r-md);

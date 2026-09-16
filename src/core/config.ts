@@ -69,10 +69,22 @@ export const config: AppConfig = {
      * 1.3.0：知识条目附件上传、问答归档入口、自助服务权限矩阵可编辑、
      *        自助/邮件需求单「标记实施完成」、问题驱动发布申请（问题 → 发布）。
      * 1.4.0：知识分类树行高修复（不再压行）、分类节点去掉维护责任人（责任人只属于知识条目）。
-     * 1.5.0：验收 / 评价补角色兜底——申请人不是演示用户的单据（如 XQ20260121004 的「郑晓」）
+     * 1.5.0：验收 / 评价补角色兜底——申请人不是演示用户的单据（如 XQ20260821004 的「郑晓」）
      *        流转到「待验收」后，用数方 / 平台管理员同样可验收并评价，不再出现“无人可验收”的死角。
+     * 1.6.0：演示基准时间由 2026-01-27 平移至 2026-08-31（唯一真源收敛到 core/utils 的 NOW），
+     *        种子数据、单号日期段、绝对日期字面量同步平移；知识条目补齐至 20 条；
+     *        自助服务管理拆「服务目录 / 服务产品」两个页签；知识分类支持新增 / 编辑。
+     * 1.7.0：改为双时钟——NOW 取真实系统时间（新增数据、审计、单号、SLA、统计窗口按当天算），
+     *        SEED_ANCHOR 固定 2026-08-31 只服务历史归档数据；57 条未关闭记录与 248 条
+     *        近 7 天小时桶改用真实时间锚定（SLA 剩余时间合理），其单号按真实日期重新编码；
+     *        运营看板趋势窗口由近 14 天放宽到近 30 天；知识分类改为「分类管理」弹窗（增删改 + 排序）。
+     * 1.8.0：预定义需求类别可在服务台管理页配置（新增 / 编辑 / 删除类别、描述、界面字段、激活流程）；
+     *        服务目录权限矩阵由自助服务管理迁至「系统配置 → 角色与权限」；
+     *        自助服务提交的需求单来源更正为「客户自助」（原「服务台申报」不进受理队列）；
+     *        权限点拆分——新增 service.catalog.config，selfservice.admin 更名 incident.category.config；
+     *        服务台受理员移除越权的 admin.all 标记（不再能进系统配置 / 派发生产任务）。
      */
-    version: '1.5.0',
+    version: '1.8.0',
     appName: '数据需求管理',
     appFullName: '三医数据底座 · 数据服务管理工具',
     moduleName: '数据需求管理',
@@ -290,6 +302,7 @@ export const config: AppConfig = {
       'incident.view': '查看事件单',
       'incident.handle': '事件处理',
       'incident.dispatch': '事件派发与升级',
+      'incident.category.config': '事件分类与模板配置',
       'problem.manage': '问题管理',
       'problem.view': '查看问题单',
       'problem.rootcause': '根因分析',
@@ -304,7 +317,7 @@ export const config: AppConfig = {
       /* --- 服务窗口与度量 --- */
       'desk.manage': '服务台受理与广播',
       'selfservice.view': '使用自助服务',
-      'selfservice.admin': '自助服务与类别配置',
+      'service.catalog.config': '服务目录与类别配置',
       'eval.submit': '提交评价',
       'eval.view': '查看评价',
       'eval.approve': '评价/反馈审批',
@@ -355,7 +368,8 @@ export const config: AppConfig = {
           'task.view', 'task.verify', 'flow.view', 'delivery.view',
           'incident.create', 'incident.view', 'incident.dispatch',
           'problem.view', 'release.view', 'kb.write', 'kb.share',
-          'desk.manage', 'selfservice.view', 'eval.view', 'stat.view', 'audit.view', 'admin.all'
+          'desk.manage', 'selfservice.view', 'service.catalog.config',
+          'eval.view', 'stat.view', 'audit.view'
         ]
       },
       {
@@ -564,10 +578,10 @@ export const config: AppConfig = {
         desc: '微信报障 → 自动分派 → 知识推荐命中 → 一线解决 → 回访调查 → 事件统计',
         covers: ['M6 事件管理', 'M9 知识库管理', 'M10 服务台管理', 'M13 统计分析'],
         steps: [
-          { text: '在「自助服务管理」通过微信报障入口提交故障', route: '/selfservice' },
-          { text: '事件按分类规则自动分派到运维组', route: '/incident-list' },
-          { text: '处理事件时，系统按关键字自动推荐知识条目', route: '/incident-list' },
-          { text: '记录解决方案并关闭事件（一线解决）', route: '/incident-list' },
+          { text: '在「事件管理」点「新建事件」，事件来源选「微信报障」提交故障', route: '/incident/list' },
+          { text: '事件按分类规则自动分派到运维组', route: '/incident/list' },
+          { text: '处理事件时，系统按关键字自动推荐知识条目', route: '/incident/list' },
+          { text: '记录解决方案并关闭事件（一线解决）', route: '/incident/list' },
           { text: '在「服务台管理」查看自动产生的回访调查', route: '/service-desk' },
           { text: '在「统计分析」按小时/日/周/月梯度查看事件统计', route: '/stats' }
         ]
@@ -577,10 +591,10 @@ export const config: AppConfig = {
         desc: '事件升级 → 开问题单 → 根因分析 → 已知错误临时方案 → 提交知识条目 → 开变更/发布 → 业务验证 → 发布审计',
         covers: ['M6 事件管理', 'M7 问题管理', 'M8 发布管理', 'M9 知识库管理'],
         steps: [
-          { text: '切换到「运维工程师」角色，对重复出现的事件执行升级，并关联重复事件', route: '/incident-list', role: 'ops' },
-          { text: '由事件单开出问题单，自动继承关联关系', route: '/problem-list', role: 'ops' },
-          { text: '推进根因分析；暂时无法根治的转入已知错误流程并给出临时方案', route: '/problem-list', role: 'ops' },
-          { text: '将问题解决方案提交为知识条目', route: '/kb-list', role: 'ops' },
+          { text: '切换到「运维工程师」角色，对重复出现的事件执行升级，并关联重复事件', route: '/incident/list', role: 'ops' },
+          { text: '由事件单开出问题单，自动继承关联关系', route: '/problem/list', role: 'ops' },
+          { text: '推进根因分析；暂时无法根治的转入已知错误流程并给出临时方案', route: '/problem/list', role: 'ops' },
+          { text: '将问题解决方案提交为知识条目', route: '/kb/list', role: 'ops' },
           { text: '步骤 5 · 创建发布申请单：在问题单详情（问题管理 → 任一问题 → 详情）点右上角「创建发布申请」，自动带入问题号、根因与解决方案，确定升级内容与停机时间；也可在发布管理点「新建发布申请」，在「问题驱动」下拉中选择问题单', route: '/problem/list', role: 'ops' },
           { text: '步骤 6 · 执行升级与业务验证：发布管理 → 发布单详情 → 批复后「执行升级」（发布包自动归档）→ 逐项业务验证', route: '/release/list', role: 'ops' },
           { text: '发现重大问题执行回滚，或完成后进行发布审计闭环（验证项全部通过时，来源问题单会自动闭环）', route: '/release/list', role: 'ops' }
@@ -603,12 +617,12 @@ export const config: AppConfig = {
         desc: '提问 → 回答 → 最佳答案归档为知识 → 分类/责任人 → 检索（附件内容/引用次数）→ 评分评论',
         covers: ['M9 知识库管理'],
         steps: [
-          { text: '在知识库检索不到答案时发起提问', route: '/kb-qna' },
-          { text: '运维人员按线索回答问题', route: '/kb-qna' },
-          { text: '有权限的用户选择最佳答案，归档转化为知识条目', route: '/kb-qna' },
-          { text: '为知识条目设置分类与维护责任人', route: '/kb-list' },
-          { text: '通过关键字 / 全文模糊 / 附件内容检索知识，查看引用次数', route: '/kb-list' },
-          { text: '对知识评分与评论，评论自动发送给维护责任人', route: '/kb-list' }
+          { text: '在知识库检索不到答案时发起提问', route: '/kb/qna' },
+          { text: '运维人员按线索回答问题', route: '/kb/qna' },
+          { text: '有权限的用户选择最佳答案，归档转化为知识条目', route: '/kb/qna' },
+          { text: '为知识条目设置分类与维护责任人', route: '/kb/list' },
+          { text: '通过关键字 / 全文模糊 / 附件内容检索知识，查看引用次数', route: '/kb/list' },
+          { text: '对知识评分与评论，评论自动发送给维护责任人', route: '/kb/list' }
         ]
       },
       {
@@ -616,11 +630,11 @@ export const config: AppConfig = {
         desc: '需求审批通过 → 生成订阅单（回填需求工单号）→ 资源归属方审批 → 渠道授权 → 密钥发放 → 按需推送',
         covers: ['M1 需求申请管理', 'M2 需求单管理'],
         steps: [
-          { text: '需求审批通过后，在需求单详情生成订阅单（自动回填需求工单号）', route: '/demand-list' },
+          { text: '需求审批通过后，在需求单详情生成订阅单（自动回填需求工单号）', route: '/demand/list' },
           { text: '资源归属方审批订阅、配置渠道授权（使用范围 / 可见范围）', route: '/delivery' },
           { text: '为 API 服务订购方发放密钥', route: '/delivery' },
           { text: '按配送置执行数据推送（敏感资源走 SFTP），查看推送记录', route: '/delivery' },
-          { text: '查看三类交付物：接口文档 / 库表访问途径 / 文件下载', route: '/demand-list' }
+          { text: '查看三类交付物：接口文档 / 库表访问途径 / 文件下载', route: '/demand/list' }
         ]
       },
       {
@@ -630,8 +644,8 @@ export const config: AppConfig = {
         steps: [
           { text: '在需求申请中选择一张 L3 敏感资源，自动带出分类分级结论与脱敏算法', route: '/demand/apply' },
           { text: '预览样例数据：按配置规则前端脱敏后展示', route: '/demand/apply' },
-          { text: '提交后审批链自动增加安全审批节点（多级安全审批人）', route: '/demand-list' },
-          { text: '安全审批人通过系统或邮件渠道逐级审批', route: '/demand-list' },
+          { text: '提交后审批链自动增加安全审批节点（多级安全审批人）', route: '/demand/list' },
+          { text: '安全审批人通过系统或邮件渠道逐级审批', route: '/demand/list' },
           { text: '审批通过后授权范围受限，交付时记录水印与分发监控信息', route: '/delivery' }
         ]
       }

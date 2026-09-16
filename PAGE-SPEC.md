@@ -106,11 +106,11 @@ store.markRead(id); store.markAllRead()
 | `cis` | CMDB 配置项（17 条） | id,name,type,owner,env,dependsOn[],relatedTenants[],relatedServices[] |
 | `workflows` | 工作流模板（6 套） | id,name,bizType,version,status,desc,nodes[{key,name,role,slaHours,actions[],condition}],rules[{level,approvers[],mode,condition}],deployArtifacts |
 | `demandTemplates` | 需求申请模板（4 个） | id,name,category,desc,preset{} |
-| `catalogItems` | 自助服务目录（6 项=预定义需求类别） | id,name,category,icon,banner,desc,availability,serviceTime,flowId,allowedRoles[],formSchema[{key,label,type,required,options}] |
+| `catalogItems` | 自助服务目录（6 项=预定义需求类别） | id,name,category,icon,banner,desc,introHtml(服务说明富文本),availability,serviceTime,flowId,allowedRoles[],formSchema[{key,label,type,required,options}] |
 | `incidentCategories` | 事件分类（7 类） | id,name,group,autoAssign,keywords[] |
 | `incidentTemplates` | 事件模板（4 个） | id,name,categoryId,severity,impact,urgency,title,desc |
 | `decisionTree` | 事件决策树 | {root,nodes:{key:{type:'q'\|'r',text,options[{label,next}],advice,tags[]}}} |
-| `kbCategories` | 知识分类树（5 顶级，含 children） | id,name,dim(产品/用户群/业务领域/地点),children[]（维护责任人是 `knowledges.owner`，分类节点不承载责任人） |
+| `kbCategories` | 知识分类树（5 顶级，含 children；可在知识库管理页新增 / 编辑） | id,name,dim(产品/用户群/业务领域/地点),children[]（维护责任人是 `knowledges.owner`，分类节点不承载责任人） |
 | `tenantRegs` | 租户注册申请（5 条） | id,no,type(个人/企业),name,fields{},status,reviewer,reviewedAt,reviewComment |
 | `capabilityApplies` | 能力申请（4 条） | id,no,applicant,email,phone,applyType,storage,cpu,memory,tenantId,status |
 | `securityApprovals` | 安全审批工单（3 条） | id,demandId,demandNo,cate,createdAt,levels[{level,approver,channel,status,comment,at}] |

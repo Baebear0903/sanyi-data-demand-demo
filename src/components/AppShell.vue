@@ -88,14 +88,19 @@ const badges = computed<Record<string, number>>(() => {
 const isActive = (it: MenuItem) => route.path === it.route || route.path.startsWith(it.route + '/')
 function go(it: MenuItem) { if (route.path !== it.route) router.push(it.route) }
 
-/* ========================================================== 角色切换 -- */
+/* ========================================================== 身份切换 -- */
+/*
+ * 顶栏账号是本演示系统的**唯一登录账号**（名称恒定），下拉里选的是该账号的身份（角色）：
+ * 切换后只有权限、菜单可见范围与所属机构变化，账号名不变。
+ * 默认身份为平台管理员，手动切换只在本次会话（同一标签页）内保持。
+ */
 const currentRole = computed(() => store.role)
 const currentUser = computed(() => store.user)
 
 function switchRole(id: string) {
   store.setRole(id)
   const r = ROLES.find(x => x.id === id)
-  ElMessage.success(`当前账号：${r?.name}`)
+  ElMessage.success(`已切换身份：${r?.name}`)
   // 切换后若当前产品在新角色下无权限，落到第一个可用产品
   if (!productEnabled(currentProduct.value)) {
     const target = products.value.find(productEnabled)

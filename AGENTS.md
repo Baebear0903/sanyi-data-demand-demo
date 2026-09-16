@@ -18,7 +18,7 @@
 | --- | --- | --- |
 | E1 | 改动 P0 状态流转：`stores/demo.ts`、角色兜底、权限判定、路由 | `node .tooling/audit-run.mjs --script=e2e/cdp-smoke --port=9335` |
 | E2 | 改写操作、字段级审计、审计中心 | `node .tooling/audit-run.mjs --script=verify-audit-chain` |
-| E3 | 任一 UI 改动（版式 / 表格 / 溢出均属验收要点） | `node .tooling/audit-run.mjs --script=audit-tables --pages=<中文页名>`（另见 `audit-layout`、`audit-overflow`） |
+| E3 | 任一 UI 改动（版式 / 表格 / 溢出均属验收要点） | `node .tooling/audit-run.mjs --script=audit-layout --pages=<中文页名>`（尺寸默认只跑 1920x1080，多尺寸另加 `--sizes=`） |
 | E4 | 右上角信息入口抽屉（功能点覆盖表）、"上次看到哪儿"缓存 | `node .tooling/audit-run.mjs --script=verify-drawer` |
 | E5 | 交付/发版前，或改动 `vite.config.offline.ts` | 双击 `demo/offline/数据需求管理-演示系统.html`（`file://` 语义与 `dist/` 不同，必须实测） |
 | E6 | 需要给验收方出证据截图 | `node .tooling/audit-run.mjs --script=e2e/capture-proof --port=9334` |
@@ -30,23 +30,25 @@
 
 通用规范说"不要动辄跑全量"，本仓库照此执行，且更严：
 
+- **版式核验必须显式给范围**：`--pages=<中文页名>` 收窄，或 `--all` 全量；两者都不给，运行器与 `audit-layout` 以退出码 2 拒绝执行——**不默认跑全量**。
 - **受影响的页面 ≤ 3 个**时，必须用 `--pages=<中文页名>` 收窄，不许跑全量。
 - **只改文案、样式或单个组件**时，只跑对应页那一行。
-- **全量（29 页 × 多尺寸）只用于交付前，或在 UI 框架层（`styles/`、`AppShell.vue`）改动时。**
+- **全量（29 页 × 9 尺寸，命令写 `--all`）只用于交付前，或在 UI 框架层（`styles/`、`AppShell.vue`）改动时。**
 - 不在上表 E1–E7 触发范围内的改动，**不跑**浏览器核验。
 
 ## 三、执行纪律：只用运行器，不自建浏览器
 
 ```bash
 cd demo && ./node_modules/.bin/vite preview --port 4173 --strictPort   # 先起 preview（终端 A）
-node .tooling/audit-run.mjs --script=<脚本名> [--pages=审计中心] [--sizes=1920x1080] [--port=9334]
+node .tooling/audit-run.mjs --script=<脚本名> [--pages=审计中心 | --all] [--sizes=1920x1080] [--port=9334]
 ```
 
 - **必须**经 `audit-run.mjs`，不要手工 `spawn` Chrome，也不要复用旧实例。
 - 不要假设 CDP 端口（9333）上有活着的 Chrome——它随时可能僵死且不自愈。
 - 运行器负责：检查 preview、清理端口上的旧 Chrome、起全新 headless Chrome、健康检查、跑完收尾关浏览器，
   并把 `DEMO_BASE` / `DEMO_CDP` 注入子脚本。**同一端口只允许一个消费者**，冲突时显式换端口。
-- 临时几何取证用 `inspect-*.mjs`（`inspect-change` / `inspect-clip` / `inspect-dropdown` / `inspect-expand` / `inspect-align`）。
+- 临时几何取证：按需写**一次性探针**（`.tooling/tmp-*.mjs`，跑完即弃），不要固化成常驻脚本。
+  常规版式缺陷由 `audit-layout` 报出（E3）；某个具体缺陷查清了就不再留探针。
 
 ## 四、防卡死与防幻觉
 

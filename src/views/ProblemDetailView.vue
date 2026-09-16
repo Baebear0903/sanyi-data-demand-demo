@@ -11,7 +11,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useDemoStore, dictItem } from '@/stores/demo'
 import { config } from '@/core/config'
-import { fmtDate, fmtTime, fromNow, iso, addDays, NOW } from '@/core/utils'
+import { fmtDate, fmtTime, fromNow, iso, addDays, NOW, nowStamp } from '@/core/utils'
 import PageHead from '@/components/PageHead.vue'
 import StatusTag from '@/components/StatusTag.vue'
 
@@ -187,7 +187,7 @@ function submitKnowledge() {
   const cat = kbLeaves.value.find(c => c.id === kbForm.categoryId)
   const rows = store.table('knowledges') as any[]
   const kb = store.insert('knowledges', {
-    no: `${config.prefixes.knowledges}202601${String(rows.length + 1).padStart(4, '0')}`,
+    no: `${config.prefixes.knowledges}${nowStamp().slice(0, 6)}${String(rows.length + 1).padStart(4, '0')}`,
     title: kbForm.title.trim(),
     categoryId: kbForm.categoryId,
     categoryName: cat ? String(cat.name).split(' / ').pop() : '数据需求管理',
@@ -251,7 +251,7 @@ function openRelease() {
   ].filter(Boolean).join('\n')
   releaseForm.testResult = ''
   releaseForm.releaseAt = `${fmtDate(addDays(NOW, 3))} 22:00`
-  releaseForm.downtime = '2026-01-30 22:00-23:00（预计 60 分钟）'
+  releaseForm.downtime = '2026-09-03 22:00-23:00（预计 60 分钟）'
   releaseForm.version = 'v1.6.0'
   releaseVisible.value = true
 }
@@ -261,7 +261,7 @@ function submitRelease() {
   if (!releaseForm.title.trim()) { ElMessage.warning('请填写发布标题'); return }
   if (!releaseForm.releaseAt) { ElMessage.warning('请选择发布时间'); return }
   const rows = store.table('releases') as any[]
-  const no = `FB20260127${String(rows.length + 1).padStart(3, '0')}`
+  const no = `${config.prefixes.releases}${nowStamp()}${String(rows.length + 1).padStart(3, '0')}`
   const rel = store.insert('releases', {
     no,
     title: releaseForm.title.trim(),
@@ -627,7 +627,7 @@ function submitRelease() {
           <el-date-picker v-model="releaseForm.releaseAt" type="datetime" value-format="YYYY-MM-DD HH:mm" format="YYYY-MM-DD HH:mm" placeholder="选择计划发布时间" />
         </el-form-item>
         <el-form-item label="停机时间">
-          <el-input v-model="releaseForm.downtime" placeholder="如：2026-01-30 22:00-23:00（预计 60 分钟）" />
+          <el-input v-model="releaseForm.downtime" placeholder="如：2026-09-03 22:00-23:00（预计 60 分钟）" />
         </el-form-item>
         <el-form-item label="发布包版本号">
           <el-input v-model="releaseForm.version" style="width: 240px" />
