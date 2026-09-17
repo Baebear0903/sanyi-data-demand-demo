@@ -50,7 +50,7 @@ const canArchive = computed(() => store.can('kb.archive'))
 const archiverHint = computed(() =>
   canArchive.value
     ? '当前角色具备「问答归档为知识」权限，可直接选择最佳答案并归档'
-    : '当前角色无「问答归档为知识」权限（请切换为运维工程师或平台管理员）')
+    : '当前角色无「问答归档为知识」权限')
 
 /* ---------------------------------------------------------- 指标卡 -- */
 const stats = computed(() => {
@@ -127,7 +127,7 @@ function toggleExpand(row: any) {
  */
 function goArchive(row: any) {
   if (!canArchive.value) {
-    ElMessage.warning(`当前角色「${store.role.name}」无「问答归档为知识」权限，请切换为运维工程师或平台管理员后再归档`)
+    ElMessage.warning(`当前角色「${store.role.name}」无「问答归档为知识」权限`)
     return
   }
   if (row.status === 'ARCHIVED') { tab.value = 'ARCHIVED'; return }
@@ -138,7 +138,7 @@ function goArchive(row: any) {
     nextTick(() => {
       const el = document.querySelector('.ans-list') as HTMLElement | null
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      ElMessage.info('已展开候选答案，请在答案右上角点「设为最佳答案」完成归档')
+      ElMessage.info('已展开候选答案')
     })
   })
 }
@@ -209,7 +209,7 @@ function archive(q: any, ans: any) {
         + `<h3>最佳答案（线索：${ans.clue}）</h3><p>${ans.content}</p>`
         + `<h3>提问与回答</h3><ul><li>提问人：${q.asker}（${q.askerOrg}）· ${q.askedAt}</li>`
         + `<li>回答人：${ans.user} · ${ans.at} · 线索：${ans.clue}</li></ul>`
-        + `<blockquote>本条目由知识问答 ${q.no} 归档生成，实现隐性知识的挖掘与沉淀。</blockquote>`,
+        + `<blockquote>本条目由知识问答 ${q.no} 归档生成。</blockquote>`,
       attachments: [],
       ratings: [],
       comments: [],
@@ -221,12 +221,12 @@ function archive(q: any, ans: any) {
     store.notify({
       type: 'success',
       title: `问答 ${q.no} 已归档为知识条目`,
-      body: `《${questions}》已纳入知识库，实现隐性知识的挖掘。`,
+      body: `《${questions}》已纳入知识库。`,
       toRoles: ['ops', 'desk', 'consumer'],
       link: '/kb/list'
     })
     tab.value = 'ARCHIVED'
-    ElMessageBox.confirm('已将该问答转化为知识点纳入知识库，实现隐性知识挖掘。', '归档成功', {
+    ElMessageBox.confirm('已将该问答转化为知识点纳入知识库。', '归档成功', {
       confirmButtonText: '去知识库查看', cancelButtonText: '留在本页'
     }).then(() => router.push('/kb/list')).catch(() => { /* 留在本页 */ })
   }).catch(() => { /* 取消 */ })
@@ -251,7 +251,7 @@ function remind(q: any) {
 
 <template>
   <div>
-    <PageHead title="知识问答管理" desc="知识库中找不到所需知识时，通过征询问答向运维人员发起提问；运维人员按线索回答；有权限的用户选择最佳答案，将问答转化为知识点纳入知识库。">
+    <PageHead title="知识问答管理" desc="征询问答、运维作答与最佳答案归档。">
       <template #actions>
         <el-button @click="router.push('/kb/list')"><el-icon><Tickets /></el-icon> 知识库管理</el-button>
         <el-button type="primary" @click="openAsk"><el-icon><Plus /></el-icon> 发起提问</el-button>
@@ -380,7 +380,7 @@ function remind(q: any) {
         </span>
         <span class="card__spacer" />
         <span class="text-xs muted">
-          归档入口：切到 <b>「待归档」</b> 页签 → 行内点 <b>「选最佳答案并归档」</b>（或在展开的答案右上角点「设为最佳答案」）。
+          归档入口：「待归档」页签内选择最佳答案即可归档。
           {{ archiverHint }}
         </span>
       </div>

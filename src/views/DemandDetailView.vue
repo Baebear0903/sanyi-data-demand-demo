@@ -480,7 +480,7 @@ onMounted(() => {
           :closable="false"
           show-icon
           title="该单据已流转到「待验收」"
-          description="验收与评价由需求方（用数方）或平台管理员执行：可在顶栏账号区切换为「用数方」，再点右上角「验收」。"
+          description="验收与评价由需求方（用数方）或平台管理员执行。"
         />
         <el-alert
           v-if="['L3', 'L4'].includes(d.securityLevel)"
@@ -653,7 +653,7 @@ onMounted(() => {
         <div class="card mb-4">
           <div class="card__head">
             <div class="card__title">自动化部署产物</div>
-            <div class="card__sub">工作流引擎对本工单自动生成的文件（接口文档 / 调度配置 / 脱敏规则 / API 接口定义 / 交付说明）随部署记录归档</div>
+            <div class="card__sub">部署后自动生成的文件随部署记录归档</div>
             <div class="card__spacer" />
             <StatusTag v-if="deployRecs.length" :label="`${deployRecs.length} 次部署`" tone="primary" :dot="false" />
           </div>
@@ -684,8 +684,7 @@ onMounted(() => {
             <div v-else class="empty-box">
               <div class="empty-box__icon"><el-icon><Box /></el-icon></div>
               <div class="empty-box__text">
-                尚未执行自动化部署；审批通过后由生产实施方在「工作流管理 → 自动化部署」执行，
-                生成的 API 接口定义与相关文件将在此处归档并可查阅
+                尚未执行自动化部署；部署完成后生成的 API 接口定义与相关文件将在此处归档。
               </div>
             </div>
           </div>
@@ -925,7 +924,7 @@ onMounted(() => {
     <!-- 派发任务弹窗 -->
     <el-dialog v-model="dispatchVisible" title="派发生产任务" width="680px">
       <el-alert class="mb-3" type="info" :closable="false" show-icon
-        title="对新增资产的需求，通过关联任务的方式进行数据采集、加工、建模等任务的派发"
+        title="对新增资产的需求，通过关联任务派发数据采集 / 加工 / 建模任务"
         :description="`承接需求单 ${d.no} · ${d.title}`" />
       <el-form label-width="96px">
         <el-form-item label="任务名称"><el-input v-model="dform.title" /></el-form-item>

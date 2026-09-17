@@ -135,7 +135,7 @@ function pick(date: string) {
 }
 
 function newPlan() {
-  ElMessage.info('已跳转「需求变更管理」，可在其中新建变更单制定变更计划')
+  ElMessage.info('已跳转「需求变更管理」')
   router.push('/change/list')
 }
 
@@ -150,7 +150,7 @@ const busyDays = computed(() => Object.entries(evIndex.value)
   <div>
     <PageHead
       title="可视化变更窗口"
-      desc="在变更窗口中显示当前已有变更与业务事件日程，便于在制定新的变更计划时作为参考。"
+      desc="以月历叠加变更实施日与业务事件日程，辅助制定变更计划。"
     >
       <template #actions>
         <el-button type="primary" @click="newPlan"><el-icon><Plus /></el-icon> 新建变更计划</el-button>

@@ -229,7 +229,7 @@ function passRate(r: any): number {
 
 <template>
   <div>
-    <PageHead title="发布管理" desc="全盘了解变更，适用于大型或关键硬件 / 主要软件 / 打包成批变更：提高发布成功率、降低业务中断率，降低使用非法 / 缺陷 / 未授权软件的几率。">
+    <PageHead title="发布管理" desc="发布申请、升级执行、验证与回滚。">
       <template #actions>
         <el-button @click="exportList"><el-icon><Download /></el-icon> 导出</el-button>
         <el-button type="primary" @click="resetForm(); createVisible = true"><el-icon><Plus /></el-icon> 新建发布申请</el-button>
@@ -371,7 +371,7 @@ function passRate(r: any): number {
           >
             <el-option v-for="p in problemOptions" :key="p.value" :label="p.label" :value="p.value" />
           </el-select>
-          <div class="text-xs muted mt-1">选中后会把「由问题单 xxx 驱动」汇入升级修改内容；也可在问题单详情点「创建发布申请」直接带入。</div>
+          <div class="text-xs muted mt-1">选中后会把「由问题单 xxx 驱动」汇入升级修改内容。</div>
         </el-form-item>
 
         <el-form-item label="发布标题" required>

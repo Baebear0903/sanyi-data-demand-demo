@@ -63,8 +63,6 @@ const visibleRows = computed(() => {
 /** 反馈是否对该视角可见（未审批通过的反馈，用数方视角不可见） */
 const feedbackVisible = (e: any) => !!e.feedback && (view.value === 'supplier' || e.feedback.status === 'APPROVED')
 
-const hiddenByView = computed(() => evaluations.value.length - visibleRows.value.length)
-
 /* ============================================================ 筛选 -- */
 const f = reactive({ kw: '', status: '', hasFeedback: '' })
 const filtered = computed(() => {
@@ -146,7 +144,7 @@ async function approveEvaluation(e: any) {
       body: `供数方现在可以查看该评价：${truncate(e.content, 50)}`,
       toRoles: ['supplier'], link: `/evaluation/detail/${e.id}`
     })
-    ElMessage.success('审批通过，该评价已展示给供数方（可切换为供数方视角查看）')
+    ElMessage.success('审批通过，该评价已展示给供数方')
   } catch { /* 取消 */ }
 }
 
@@ -283,7 +281,7 @@ function exportList() {
   <div>
     <PageHead
       title="评价管理"
-      desc="基于数据共享过程中用户使用数据的情况进行评价与反馈，并对评价与评价反馈的审批情况进行监控。"
+      desc="评价与反馈的提交、审批与双向可见性管理。"
     >
       <template #actions>
         <el-button @click="exportList"><el-icon><Download /></el-icon> 导出</el-button>
@@ -324,9 +322,8 @@ function exportList() {
           </div>
         </div>
         <div class="text-xs muted mt-3">
-          当前为「{{ view === 'consumer' ? '用数方' : '供数方' }}视角」：共 {{ evaluations.length }} 条评价，
-          其中 <b>{{ hiddenByView }}</b> 条因未审批通过而对该视角不可见；当前列表显示 <b>{{ filtered.length }}</b> 条。
-          评价与反馈的审批由「供数方 / 平台管理员」承担（权限点 eval.approve）。
+          当前为「{{ view === 'consumer' ? '用数方' : '供数方' }}视角」：列表显示 <b>{{ filtered.length }}</b> 条评价。
+          评价与反馈的审批由「供数方 / 平台管理员」承担。
         </div>
       </div>
     </div>

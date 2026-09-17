@@ -168,7 +168,7 @@ const dimPct = (v: number) => Math.round((Number(v) || 0) / 5 * 100)
   <div>
     <PageHead
       :title="ev ? `评价单 / 反馈单详情 · ${ev.no}` : '评价单 / 反馈单详情'"
-      desc="展示评价人、评分、评价内容、评价时间、审批状态，以及对该评价的反馈详情（反馈人、反馈内容、审批状态）。"
+      desc="评价单与反馈单详情：评分、内容、审批状态与字段级留痕。"
     >
       <template #actions>
         <el-button @click="router.push('/evaluation')"><el-icon><ArrowLeft /></el-icon> 返回评价管理</el-button>
@@ -191,7 +191,7 @@ const dimPct = (v: number) => Math.round((Number(v) || 0) / 5 * 100)
       <div class="card">
         <div class="card__head">
           <div class="card__title">视角与可见性</div>
-          <div class="card__sub">切换视角可直观验证"审批通过后才互相可见"的规则</div>
+          <div class="card__sub">审批通过后，评价与反馈才对双方互相可见</div>
           <div class="card__spacer" />
           <el-radio-group v-model="view" size="small">
             <el-radio-button value="consumer">以用数方视角</el-radio-button>
@@ -204,12 +204,11 @@ const dimPct = (v: number) => Math.round((Number(v) || 0) / 5 * 100)
             show-icon
             :closable="false"
             :title="view === 'consumer'
-              ? '当前以用数方视角查看：可查看本方发起的评价全流程；供数方反馈需审批通过后才可见。'
-              : '当前以供数方视角查看：仅可查看审批通过的评价；本方反馈（含待审批）可见。'"
+              ? '用数方视角：可查看本方发起的评价全流程；供数方反馈需审批通过后才可见。'
+              : '供数方视角：仅可查看审批通过的评价；本方反馈（含待审批）可见。'"
           />
           <div class="text-xs muted mt-3">
-            当前角色「{{ store.role.name }}」的数据范围为 {{ store.role.dataScope }}；
-            审批权限点 <code>eval.approve</code> {{ canApprove ? '已具备' : '不具备' }}（可在顶栏切换角色查看差异）。
+            当前角色「{{ store.role.name }}」的数据范围：{{ store.role.dataScope === 'ALL' ? '全部' : store.role.dataScope === 'ORG' ? '本组织' : '本人' }}；{{ canApprove ? '可审批评价与反馈' : '不可审批评价与反馈' }}。
           </div>
         </div>
       </div>
@@ -227,7 +226,7 @@ const dimPct = (v: number) => Math.round((Number(v) || 0) / 5 * 100)
             <div class="empty-box__icon"><el-icon><DocumentRemove /></el-icon></div>
             <div class="empty-box__text">
               该评价尚未审批通过（当前状态：{{ dictItem('EvaluationStatus', ev.status).label }}），<b>供数方视角不可见</b>。<br>
-              请切换到「用数方视角」查看评价内容，或由审批人先完成审批。
+              评价内容需审批通过后可见。
             </div>
           </div>
 
@@ -315,7 +314,7 @@ const dimPct = (v: number) => Math.round((Number(v) || 0) / 5 * 100)
       <div class="card">
         <div class="card__head">
           <div class="card__title">反馈单详情</div>
-          <div class="card__sub">原始评价单信息 + 对该评价的反馈详情（10.2）</div>
+          <div class="card__sub">原始评价单信息 + 对该评价的反馈详情</div>
           <div class="card__spacer" />
           <StatusTag
             v-if="ev.feedback"
@@ -337,7 +336,7 @@ const dimPct = (v: number) => Math.round((Number(v) || 0) / 5 * 100)
 
           <div v-if="!ev.feedback" class="empty-box">
             <div class="empty-box__icon"><el-icon><DocumentRemove /></el-icon></div>
-            <div class="empty-box__text">供数方尚未提交反馈{{ isSupplierRole ? '，可点击右上角「提交反馈」' : '' }}</div>
+            <div class="empty-box__text">供数方尚未提交反馈</div>
           </div>
 
           <div v-else-if="feedbackBlocked" class="empty-box">
@@ -451,16 +450,6 @@ const dimPct = (v: number) => Math.round((Number(v) || 0) / 5 * 100)
                 <div class="empty-box__icon"><el-icon><DocumentRemove /></el-icon></div>
                 <div class="empty-box__text">暂无流转记录</div>
               </div>
-            </div>
-          </div>
-
-          <div class="card">
-            <div class="card__head"><div class="card__title">使用提示</div></div>
-            <div class="card__body text-sm muted" style="line-height: 1.9">
-              <div>1. 评价单与反馈单在同一页面相互跳转查看（本页两块内容）。</div>
-              <div>2. 切换视角可对比审批前后的可见性差异。</div>
-              <div>3. 执行审批后，审计日志与流转时间轴会立即新增记录。</div>
-              <div>4. 评价数据可在「统计分析 → 需求与交付度量」中查看得分分布。</div>
             </div>
           </div>
         </div>

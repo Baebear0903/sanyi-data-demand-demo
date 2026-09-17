@@ -495,7 +495,7 @@ function actionsOf(c: any): { label: string; type?: string; run: () => void }[] 
   <div>
     <PageHead
       title="需求变更管理"
-      desc="需求创建与变更、需求关联、独立审批引擎、基于 CMDB 的风险评估与冲突分析、变更审计与可视化变更窗口。"
+      desc="需求变更单的创建、审批、风险评估、冲突分析与可视化排期。"
     >
       <template #actions>
         <el-button @click="router.push('/change/calendar')"><el-icon><Calendar /></el-icon> 可视化变更窗口</el-button>
@@ -690,7 +690,7 @@ function actionsOf(c: any): { label: string; type?: string; run: () => void }[] 
     </el-drawer>
 
     <!-- ================= 风险评估抽屉 ================= -->
-    <el-drawer v-model="impactVisible" title="风险评估 · 基于 CMDB 的影响模拟分析" size="720px">
+    <el-drawer v-model="impactVisible" title="风险评估 · 影响模拟分析" size="720px">
       <template v-if="impactRow && impactResult">
         <div class="mb-3">
           <div class="bold">{{ impactRow.no }} · {{ impactRow.title }}</div>
@@ -705,7 +705,7 @@ function actionsOf(c: any): { label: string; type?: string; run: () => void }[] 
         </div>
 
         <el-alert type="info" :closable="false" show-icon class="mb-3"
-          title="影响链路模拟：变更资源 → 受影响配置项（沿 dependsOn 反向遍历）→ 受影响服务 → 受影响租户"
+          title="影响链路：变更资源 → 受影响配置项 → 受影响服务 → 受影响租户"
           :description="`共影响 ${impactResult.ciList.length} 个配置项、${impactResult.services.length} 个服务、${impactResult.tenants.length} 个租户`" />
 
         <div class="impact">
@@ -735,8 +735,8 @@ function actionsOf(c: any): { label: string; type?: string; run: () => void }[] 
         </div>
 
         <el-alert class="mt-3" type="warning" :closable="false" show-icon
-          title="影响模拟结果已写回变更单（impact 字段与风险等级）"
-          description="可继续执行「冲突分析」，基于配置项与服务调用情况检出时间窗 / 资源占用 / 服务依赖冲突。" />
+          title="影响模拟结果已写入变更单"
+          description="可继续执行「冲突分析」，检出时间窗 / 资源占用 / 服务依赖冲突。" />
       </template>
       <div v-else class="empty-box">
         <div class="empty-box__icon"><el-icon><Compass /></el-icon></div>
@@ -749,7 +749,7 @@ function actionsOf(c: any): { label: string; type?: string; run: () => void }[] 
     </el-drawer>
 
     <!-- ================= 冲突分析抽屉 ================= -->
-    <el-drawer v-model="conflictVisible" title="冲突分析 · 基于配置项与服务调用情况" size="760px">
+    <el-drawer v-model="conflictVisible" title="冲突分析" size="760px">
       <template v-if="conflictRow">
         <div class="bold mb-1">{{ conflictRow.no }} · {{ conflictRow.title }}</div>
         <div class="text-xs muted mb-3">
@@ -761,7 +761,7 @@ function actionsOf(c: any): { label: string; type?: string; run: () => void }[] 
           :closable="false"
           show-icon
           :title="conflictResult.length ? `检出 ${conflictResult.length} 项冲突，建议调整实施计划` : '未检出冲突，可按计划实施'"
-          description="冲突判定包含：① 时间窗冲突（实施日期相同或相邻）② 资源冲突（涉及资源有交集的在途变更）③ 服务依赖冲突（影响链路服务存在交集）"
+          description="冲突类型包含时间窗 / 资源占用 / 服务依赖三类。"
         />
         <el-table :data="conflictResult" style="width: 100%">
           <el-table-column label="冲突类型" width="104">
@@ -782,7 +782,7 @@ function actionsOf(c: any): { label: string; type?: string; run: () => void }[] 
           </template>
         </el-table>
         <div class="text-xs muted mt-3">
-          冲突分析结果已写回变更单（conflicts 字段），可在变更单详情与「可视化变更窗口」中一并查看。
+          冲突分析结果已写入变更单。
         </div>
       </template>
       <template #footer>

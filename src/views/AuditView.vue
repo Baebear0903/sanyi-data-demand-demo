@@ -139,7 +139,7 @@ function exportAudits() {
   <div>
     <PageHead
       title="审计中心"
-      desc="记录任意单据字段级的数据变化前后值、修改人与时间，保证数据安全性；统一承载变更审计、事件审计、问题审计、发布审计四类要求。"
+      desc="按单据类型检索字段级变更留痕：修改人、时间与变更前后值。"
     >
       <template #actions>
         <el-button @click="exportAudits"><el-icon><Download /></el-icon> 导出审计记录</el-button>
@@ -271,7 +271,7 @@ function exportAudits() {
       <!-- ============================================== 侧栏说明 -- -->
       <div>
         <div class="card">
-          <div class="card__head"><div class="card__title">四类审计覆盖情况</div></div>
+          <div class="card__head"><div class="card__title">留痕按单据类型分布</div></div>
           <div class="card__body">
             <div v-for="b in ['changes', 'incidents', 'problems', 'releases']" :key="b" class="audit-cover">
               <div class="flex items-center justify-between">
@@ -279,10 +279,10 @@ function exportAudits() {
                 <span class="mono text-sm">{{ allAudits.filter(a => a.bizType === b).length }} 条</span>
               </div>
               <div class="text-xs muted mt-1">
-                {{ b === 'changes' ? '记录变更数据变化前后的修改人、时间' :
-                   b === 'incidents' ? '记录事件处理过程的状态与处理人变化' :
-                   b === 'problems' ? '记录问题根因分析与已知错误流转' :
-                   '对发布项进行事后审计，确保每次升级闭环' }}
+                {{ b === 'changes' ? '变更单数据变化前后的修改人与时间' :
+                   b === 'incidents' ? '事件单处理过程的状态与处理人变化' :
+                   b === 'problems' ? '问题单根因分析与已知错误流转' :
+                   '发布单的事后审计留痕' }}
               </div>
             </div>
           </div>

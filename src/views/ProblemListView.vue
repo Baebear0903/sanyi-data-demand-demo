@@ -427,7 +427,7 @@ function exportList() { ElMessage.success(`已导出 ${filtered.value.length} �
 
 <template>
   <div>
-    <PageHead title="问题管理" desc="将业务影响降到最低：查明根因、制定解决方案与预防措施、实施主动问题管理，并与事件 / 变更 / 配置项 / 知识库联动闭环。">
+    <PageHead title="问题管理" desc="问题的根因分析、已知错误流转、解决方案与预防措施。">
       <template #actions>
         <el-button @click="exportList"><el-icon><Download /></el-icon> 导出</el-button>
         <el-button type="primary" @click="createVisible = true"><el-icon><Plus /></el-icon> 新建问题</el-button>
@@ -450,21 +450,18 @@ function exportList() { ElMessage.success(`已导出 ${filtered.value.length} �
       <div class="card__body">
         <div class="grid grid--3">
           <div>
-            <div class="card__sub mb-2">（1）问题按状态分布</div>
+            <div class="card__sub mb-2">问题按状态分布</div>
             <ChartBox kind="donut" :data="statusData" :height="230" center-label="问题单" />
           </div>
           <div>
-            <div class="card__sub mb-2">（2）问题按{{ causeDim === 'cause' ? '根因分类' : '归属部门' }} TOP</div>
+            <div class="card__sub mb-2">问题按{{ causeDim === 'cause' ? '根因分类' : '归属部门' }} TOP</div>
             <ChartBox kind="bar" :data="causeData" :height="230" :rotate="true" />
           </div>
           <div>
-            <div class="card__sub mb-2">（3）各部门已知错误 / 已解决数量</div>
+            <div class="card__sub mb-2">各部门已知错误 / 已解决数量</div>
             <ChartBox kind="hbar" :data="knownErrorByDept.length ? knownErrorByDept : [{ name: '暂无已知错误', value: 0 }]" />
             <ChartBox kind="hbar" :data="resolvedByDept.length ? resolvedByDept : [{ name: '暂无已解决问题', value: 0 }]" />
           </div>
-        </div>
-        <div class="text-xs muted mt-2">
-          根因分类按根因描述关键字归类；「预防措施执行情况」以各部门当前处于已知错误 / 已解决状态的问题单数量表示。
         </div>
       </div>
     </div>
@@ -600,7 +597,7 @@ function exportList() { ElMessage.success(`已导出 ${filtered.value.length} �
                 <span class="muted text-xs" style="margin-left: 8px">{{ dictItem('IncidentStatus', i.status).label }} · {{ i.priority }}</span>
               </el-option>
             </el-select>
-            <div class="text-xs muted mt-1">选中后自动带出标题、描述与分类；提交时回写事件的 problemId，形成事件 → 问题关联。</div>
+            <div class="text-xs muted mt-1">选中后自动带出标题、描述与分类。</div>
           </el-form-item>
         </template>
 
@@ -878,8 +875,8 @@ function exportList() { ElMessage.success(`已导出 ${filtered.value.length} �
           <el-input v-model="kbForm.content" type="textarea" :rows="7" />
         </el-form-item>
         <el-form-item label="提交后状态">
-          <StatusTag dict="" label="待审核（PENDING_REVIEW）" tone="warning" />
-          <span class="text-xs muted" style="margin-left: 8px">需知识库维护责任人审核后发布，符合知识条目管理规范流程。</span>
+          <StatusTag dict="" label="待审核" tone="warning" />
+          <span class="text-xs muted" style="margin-left: 8px">需知识库维护责任人审核后发布。</span>
         </el-form-item>
       </el-form>
       <template #footer>

@@ -223,7 +223,7 @@ const canConfig = computed(() => store.can('incident.category.config'))
   <div>
     <PageHead
       title="事件分类与模板配置"
-      desc="预先定义事件分类（含自动分派目标与匹配关键字）、严重等级 / 影响程度 / 紧急程度字典与优先级规则，并维护事件模板。"
+      desc="维护事件分类、优先级规则与事件模板。"
     >
       <template #actions>
         <el-button :disabled="!canConfig" @click="openTplCreate"><el-icon><Plus /></el-icon> 新增模板</el-button>
@@ -237,7 +237,7 @@ const canConfig = computed(() => store.can('incident.category.config'))
       type="info"
       show-icon
       :closable="false"
-      title="查看态：当前角色无「事件分类与模板配置」权限，分类与模板的新增 / 编辑 / 删除已置灰；如需配置请切换为平台管理员。"
+      title="查看态：当前角色无「事件分类与模板配置」权限，分类与模板的新增 / 编辑 / 删除已置灰。"
     />
 
     <!-- ================================================== 事件分类管理 == -->
@@ -357,7 +357,6 @@ const canConfig = computed(() => store.can('incident.category.config'))
         </div>
         <div class="card__body">
           <ChartBox kind="hbar" :data="catChart" />
-          <div class="text-xs muted mt-3">分类过粗会导致自动分派不准，过细则维护成本高；建议按「处理组」维度保持 5–10 个分类。</div>
         </div>
       </div>
     </div>

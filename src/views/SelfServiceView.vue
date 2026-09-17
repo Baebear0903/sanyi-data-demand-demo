@@ -53,7 +53,7 @@ const stats = computed(() => {
   const mailI = incidents.filter(i => i.source === '邮件').length
   return [
     { label: '服务目录项', value: rows.length, unit: '项', icon: 'Grid', tone: 'primary' as const, delta: `${categories.value.length} 个类别` },
-    { label: '当前角色可用', value: mine, unit: '项', icon: 'Key', tone: 'success' as const, delta: `角色：${store.role.name}`, tip: '按服务产品的 allowedRoles 与当前角色计算' },
+    { label: '当前角色可用', value: mine, unit: '项', icon: 'Key', tone: 'success' as const, delta: `角色：${store.role.name}`, tip: '按当前角色的可申请范围计算' },
     { label: '自助服务提交', value: selfD + selfI, unit: '单', icon: 'User', tone: 'teal' as const, delta: `需求 ${selfD} · 事件 ${selfI}` },
     { label: '邮件提交', value: mailD + mailI, unit: '单', icon: 'Message', tone: 'warning' as const, delta: `需求 ${mailD} · 事件 ${mailI}` },
     { label: '待解析邮件', value: mailsPending(), unit: '封', icon: 'Promotion', tone: 'danger' as const, tip: '服务台邮箱中尚未解析建单的邮件' }
@@ -129,7 +129,7 @@ const currentFlow = computed(() => workflows.value.find(w => w.id === current.va
 function openItem(item: any) {
   if (!item) return
   if (!available(item)) {
-    ElMessage.warning(`当前角色「${store.role.name}」无权申请「${item.name}」，如需申请请在顶栏账号区切换为有权限的身份`)
+    ElMessage.warning(`当前角色「${store.role.name}」无权申请「${item.name}」`)
     return
   }
   current.value = item
@@ -213,7 +213,7 @@ function createTicket(item: any, values: Record<string, any>, origin: 'SELF' | '
     })
     return {
       kind: 'capability', no, route: '/selfservice',
-      text: `已生成能力申请单 ${no}，提交至平台运营中心审核（「权限服务」类别按页面说明映射为能力申请单）`
+      text: `已生成能力申请单 ${no}，提交至平台运营中心审核`
     }
   }
 
@@ -365,7 +365,7 @@ function parseMail(mail: Mail) {
   <div>
     <PageHead
       title="自助服务管理"
-      desc="通过服务目录发布服务内容，帮助用户自己处理事件或完成事件、问题的申报，从而大量降低进入服务台的请求，使运维工程师集中精力解决服务故障事件和恢复关键任务。"
+      desc="面向最终用户的服务门户：服务目录、服务产品，支持 Web 与邮件提交需求。"
     >
       <template #actions>
         <el-button @click="router.push('/service-desk')">前往服务台</el-button>
@@ -517,15 +517,14 @@ function parseMail(mail: Mail) {
     <!-- ====================================== 预定义需求类别（9.6） -- -->
     <div class="card">
       <div class="card__head">
-        <div class="card__title">预定义需求类别（{{ categoryMapping.length }} 类）</div>
+        <div class="card__title">预定义需求类别</div>
         <div class="card__sub">提供预定义故障和服务申请的类别、描述；按所选服务类型展现不同界面、要求输入相关信息、激活不同处理流程</div>
         <div class="card__spacer" />
         <StatusTag :label="`${categoryGroups.length} 个类别组`" tone="info" :dot="false" />
       </div>
       <div class="card__body">
         <div class="text-xs muted mb-3">
-          下表即「预定义需求类别」的完整定义：<b>类别 → 服务目录项 → 动态界面字段 → 激活的处理流程 → 生成单据</b>。
-          在服务目录中点任一服务产品，抽屉会按此定义渲染表单并激活对应流程。
+          类别、界面字段与激活流程一览
         </div>
         <el-table :data="categoryMapping" style="width: 100%" row-key="id" size="small">
           <el-table-column label="类别" width="96">
@@ -568,7 +567,7 @@ function parseMail(mail: Mail) {
     <div class="card">
       <div class="card__head">
         <div class="card__title">电子邮件提交需求（服务台邮箱）</div>
-        <div class="card__sub">支持用户通过电子邮件方式提交服务申请，点击「解析并建单」可将邮件转为对应工单（9.5）</div>
+        <div class="card__sub">支持用户通过电子邮件方式提交服务申请，点击「解析并建单」可将邮件转为对应工单</div>
         <div class="card__spacer" />
         <StatusTag :label="`待解析 ${mailsPending()} 封`" :tone="mailsPending() ? 'warning' : 'success'" />
       </div>
@@ -660,7 +659,7 @@ function parseMail(mail: Mail) {
         <div class="card">
           <div class="card__head">
             <div class="card__title">填写申请信息</div>
-            <div class="card__sub">按该服务产品预定义的需求类别渲染表单（9.6）</div>
+            <div class="card__sub">按该服务产品预定义的需求类别渲染表单</div>
           </div>
           <div class="card__body">
             <el-form label-width="132px">
@@ -688,7 +687,7 @@ function parseMail(mail: Mail) {
             <div class="text-xs muted">
               提交后按服务类别激活不同流程：<b>数据服务</b>生成需求单（来源「客户自助」/「电子邮件」）；
               <b>故障申诉</b>生成事件单（来源「客户自助」/「邮件」，并按分类规则自动分派）；
-              <b>权限服务</b>生成能力申请单（能力开放门户 · 能力申请，提交平台运营中心审核）。
+              <b>权限服务</b>生成能力申请单，提交平台运营中心审核。
             </div>
           </div>
           <div class="card__foot">

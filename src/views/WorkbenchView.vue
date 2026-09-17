@@ -73,10 +73,10 @@ interface RoleBoard {
 const BOARDS: Record<string, RoleBoard> = {
   desk: {
     tag: '服务台受理',
-    summary: '汇总需求受理与交付、事件闭环与服务量的关键指标，突出待受理需求与未闭环事件，支撑统一受理与分派监督。',
+    summary: '本角色待受理的需求、待处置的事件与服务量概览。',
     stats: ['pendingAccept', 'openIncident', 'escalatedIncident', 'incidentTotal', 'delivered', 'demandTotal'],
     trendTitle: '需求提交与交付趋势',
-    trendNote: '近 30 天 · 服务台受理口径',
+    trendNote: '近 30 天',
     trendTag: '来源：需求单流转记录',
     trendSource: 'demand',
     todosTitle: '我的待办 · 服务台受理',
@@ -94,10 +94,10 @@ const BOARDS: Record<string, RoleBoard> = {
   },
   supplier: {
     tag: '供数方审批',
-    summary: '汇总需求审批、订阅授权与评价反馈的关键指标，突出待审批事项与已交付需求，支撑资源归属方审批决策。',
+    summary: '本角色待审批的需求、订阅与评价，以及已交付需求概览。',
     stats: ['pendingApprove', 'pendingSubscription', 'pendingEvaluation', 'implementing', 'delivered', 'resourceCatalog'],
     trendTitle: '需求提交与交付趋势',
-    trendNote: '近 30 天 · 资源归属方审批口径',
+    trendNote: '近 30 天',
     trendTag: '来源：需求单流转记录',
     trendSource: 'demand',
     todosTitle: '我的待办 · 供数审批',
@@ -115,10 +115,10 @@ const BOARDS: Record<string, RoleBoard> = {
   },
   ops: {
     tag: '运维处理',
-    summary: '汇总事件处理、问题推进与发布验证的关键指标，突出未闭环事件与待处置事项，支撑一线与二线协同。',
+    summary: '本角色待处置的事件、问题与发布验证进展概览。',
     stats: ['openIncident', 'escalatedIncident', 'openProblem', 'pendingRelease', 'pendingKnowledge', 'incidentTotal'],
     trendTitle: '事件新建与解决趋势',
-    trendNote: '近 30 天 · 运维处置口径',
+    trendNote: '近 30 天',
     trendTag: '来源：事件单处理记录',
     trendSource: 'incident',
     todosTitle: '我的待办 · 运维处理',
@@ -136,10 +136,10 @@ const BOARDS: Record<string, RoleBoard> = {
   },
   producer: {
     tag: '生产实施',
-    summary: '汇总生产任务承接、实施进度与交付产物的关键指标，突出实施中任务与待接单任务，支撑加工与建模排产。',
+    summary: '本角色任务承接、实施进度与交付产物概览。',
     stats: ['doingTask', 'pendingAcceptTask', 'pendingVerifyTask', 'doneTask', 'deployArtifact', 'taskTotal'],
     trendTitle: '任务派发与完成趋势',
-    trendNote: '近 30 天 · 生产实施口径',
+    trendNote: '近 30 天',
     trendTag: '来源：任务单实施记录',
     trendSource: 'task',
     todosTitle: '我的待办 · 生产实施',
@@ -157,10 +157,10 @@ const BOARDS: Record<string, RoleBoard> = {
   },
   consumer: {
     tag: '用数申请',
-    summary: '汇总本账号提交需求的受理与交付进度，突出在途申请、待验收与待评价事项，方便随时掌握数据到手情况。',
+    summary: '本账号提交需求的受理、交付、验收与评价进度。',
     stats: ['mineInflight', 'mineAcceptance', 'mineDelivered', 'mineEvaluate', 'mineTotal', 'resourceCatalog'],
     trendTitle: '我的需求流转趋势',
-    trendNote: '近 30 天 · 本账号申请口径',
+    trendNote: '近 30 天',
     trendTag: '来源：我的需求单',
     trendSource: 'demand',
     todosTitle: '我的待办 · 用数申请',
@@ -178,7 +178,7 @@ const BOARDS: Record<string, RoleBoard> = {
   },
   admin: {
     tag: '全量概览',
-    summary: '汇总需求、任务、事件、问题、发布与订阅授权的全量指标，用于平台整体运营概览与跨模块态势掌握。',
+    summary: '全平台需求、任务、事件、问题、发布与订阅授权的整体概览。',
     stats: ['demandTotal', 'taskTotal', 'incidentTotal', 'problemTotal', 'releaseTotal', 'subscriptionTotal'],
     trendTitle: '需求提交与交付趋势',
     trendNote: '近 30 天 · 全量数据',
@@ -498,7 +498,6 @@ const recentAudits = computed(() => (store.table('audits') as any[]).slice(0, 7)
         <div v-if="board.todosTitle" class="card">
           <div class="card__head">
             <div class="card__title"><el-icon class="card__ico"><Clock /></el-icon>{{ board.todosTitle }}</div>
-            <div class="card__sub">依据当前账号角色与单据状态实时推导</div>
             <div class="card__spacer" />
             <el-tag size="small" type="warning">{{ store.todos.length }} 项</el-tag>
           </div>

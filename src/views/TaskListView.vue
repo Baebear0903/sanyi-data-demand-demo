@@ -360,7 +360,7 @@ function sourceLabel(t: any): string {
   <div>
     <PageHead
       title="任务管理"
-      desc="根据用户反馈的数据问题创建任务并指定生产部门实施，跟踪任务的审批与最终实施情况，监控各生产部门任务单处理状态。"
+      desc="生产任务的派发、接单、实施进度与成果验证。"
     >
       <template #actions>
         <el-button type="primary" @click="openCreate"><el-icon><Plus /></el-icon> 新建任务单</el-button>
@@ -373,7 +373,7 @@ function sourceLabel(t: any): string {
       <div class="card">
         <div class="card__head">
           <div class="card__title">任务单列表</div>
-          <div class="card__sub">可按来源单据追溯任务来源；点击行操作「详情」查看任务关联信息</div>
+          <div class="card__sub">可按来源单据追溯任务来源</div>
         </div>
         <div class="toolbar">
           <div class="toolbar__fields">
@@ -617,7 +617,7 @@ function sourceLabel(t: any): string {
           </div>
           <div v-if="!curProblems.length" class="empty-box">
             <div class="empty-box__icon">?</div>
-            <div class="empty-box__text">本任务单未关联数据问题；可在新建任务单时主动关联问题单</div>
+            <div class="empty-box__text">本任务单未关联数据问题</div>
           </div>
           <div v-for="p in curProblems" :key="p.id" class="prob-item">
             <div class="flex items-center justify-between">
@@ -698,8 +698,8 @@ function sourceLabel(t: any): string {
     <!-- ================= 新建任务单弹窗 ================= -->
     <el-dialog v-model="createVisible" title="新建任务单" width="720px">
       <el-alert class="mb-3" type="info" :closable="false" show-icon
-        title="新建任务单时可主动关联问题单（也可在问题管理处为问题单关联任务单）"
-        description="任务单创建后处于「待派发」状态，派发至生产部门后由实施人接单实施。" />
+        title="可关联数据问题单"
+        description="创建后处于「待派发」状态，派发后由实施人接单实施。" />
       <el-form label-width="104px">
         <el-form-item label="任务名称" required><el-input v-model="nf.title" placeholder="请输入任务名称" /></el-form-item>
         <el-form-item label="任务类型">

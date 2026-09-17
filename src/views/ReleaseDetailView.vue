@@ -129,7 +129,7 @@ function republish() {
 function runAudit() {
   const rec = r.value
   if (!rec) return
-  ElMessageBox.prompt('请填写发布事后审计结论（确保每次升级闭环）', `发布审计 ${rec.no}`, {
+  ElMessageBox.prompt('请填写发布事后审计结论', `发布审计 ${rec.no}`, {
     inputValue: `发布项事后审计完成：本次升级涉及 ${list(rec.changeIds).length} 个变更、${list(rec.demandIds).length} 个需求，业务验证通过率 ${passRate.value}%，无遗留问题。`,
     inputType: 'textarea', confirmButtonText: '提交审计结论'
   }).then(({ value }) => {
@@ -201,7 +201,7 @@ function approve() {
 
     <div v-if="!r" class="empty-box">
       <div class="empty-box__icon"><el-icon><DocumentRemove /></el-icon></div>
-      <div class="empty-box__text">未找到发布单（可能已被重置），请返回列表重新选择</div>
+      <div class="empty-box__text">未找到发布单，请返回列表重新选择</div>
     </div>
 
     <template v-else>
@@ -237,7 +237,7 @@ function approve() {
             <div class="text-sm">回滚时间：{{ fmtTime(r.rollback.at) }} · 操作人：{{ r.rollback.operator }}</div>
             <div class="text-sm">版本：{{ r.rollback.fromVersion }} → {{ r.rollback.toVersion }}</div>
             <div class="text-sm mt-1">原因：{{ r.rollback.reason }}</div>
-            <div class="text-xs muted mt-1">排除故障后可点击右上角「重新发布」按原批复重新执行升级。</div>
+            <div class="text-xs muted mt-1">排除故障后可重新发布，按原批复重新执行升级。</div>
           </div>
         </div>
       </div>
@@ -269,7 +269,7 @@ function approve() {
           <div class="card mb-4">
             <div class="card__head">
               <span class="card__title">发布包管理</span>
-              <span class="card__sub">每次发布的安装都进行归档，可随时回滚到上一个版本</span>
+              <span class="card__sub">归档后可随时回滚到上一个版本</span>
               <span class="card__spacer" />
               <span class="text-xs muted">回滚将写入审计与时间轴</span>
             </div>
@@ -380,7 +380,7 @@ function approve() {
           <div class="card">
             <div class="card__head">
               <span class="card__title">发布审计结论</span>
-              <span class="card__sub">对发布项进行事后审计，确保每次升级闭环</span>
+              <span class="card__sub">发布项的事后审计留痕</span>
               <span class="card__spacer" />
               <el-button v-if="canManage" size="small" type="success" plain @click="runAudit">
                 {{ r.auditedAt ? '重新审计' : '执行事后审计' }}
@@ -393,7 +393,7 @@ function approve() {
               </div>
               <div v-else class="empty-box">
                 <div class="empty-box__icon"><el-icon><Tickets /></el-icon></div>
-                <div class="empty-box__text">尚未执行事后审计，发布项未闭环</div>
+                <div class="empty-box__text">尚未执行事后审计</div>
               </div>
             </div>
           </div>

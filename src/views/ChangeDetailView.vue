@@ -280,7 +280,7 @@ function onPlanSaved({ rerun }: { rerun: boolean }) {
             <el-button type="primary" @click="approve">审批</el-button>
             <el-button @click="reject">驳回</el-button>
           </template>
-          <el-tooltip v-else content="审批入口需「供数方」或「平台管理员」角色（权限点 demand.approve）" placement="bottom">
+          <el-tooltip v-else content="审批入口需「供数方」或「平台管理员」角色" placement="bottom">
             <el-button disabled>审批</el-button>
           </el-tooltip>
         </template>
@@ -301,7 +301,7 @@ function onPlanSaved({ rerun }: { rerun: boolean }) {
       :closable="false"
       show-icon
       title="当前角色无变更审批权限"
-      description="变更单审批由「供数方」（资源归属方）或「平台管理员」执行，可在顶栏切换角色后审批；审批后的字段级留痕会写入审计中心。"
+      description="变更单审批由「供数方」（资源归属方）或「平台管理员」执行；审批留痕写入审计中心。"
     />
 
     <!-- 流转条 -->
@@ -397,7 +397,7 @@ function onPlanSaved({ rerun }: { rerun: boolean }) {
     <div class="card mb-4">
       <div class="card__head">
         <div class="card__title">风险评估结果（CMDB 影响链路）</div>
-        <div class="card__sub">基于配置管理数据库的数据模型进行影响模拟分析</div>
+        <div class="card__sub">基于配置项依赖关系进行影响模拟分析</div>
         <div class="card__spacer" />
         <StatusTag v-if="c.impact" dict="RiskLevel" :value="c.riskLevel" />
         <el-button size="small" type="primary" plain @click="rerunImpact">重新模拟</el-button>
@@ -405,7 +405,7 @@ function onPlanSaved({ rerun }: { rerun: boolean }) {
       <div class="card__body">
         <div v-if="!c.impact" class="empty-box">
           <div class="empty-box__icon"><el-icon><Compass /></el-icon></div>
-          <div class="empty-box__text">尚未执行风险评估，点击「重新模拟」按 CMDB 依赖关系生成影响链路</div>
+          <div class="empty-box__text">尚未执行风险评估</div>
         </div>
         <template v-else>
           <div class="impact">
@@ -445,7 +445,7 @@ function onPlanSaved({ rerun }: { rerun: boolean }) {
     <div class="card mb-4">
       <div class="card__head">
         <div class="card__title">冲突分析结果</div>
-        <div class="card__sub">基于配置项和服务调用情况</div>
+        <div class="card__sub">按配置项与服务调用情况检出</div>
         <div class="card__spacer" />
         <StatusTag :label="`检出 ${lst(c.conflicts).length} 项冲突`" :tone="lst(c.conflicts).length ? 'warning' : 'success'" :dot="false" />
         <el-button size="small" type="primary" plain @click="rerunConflict">重新分析</el-button>

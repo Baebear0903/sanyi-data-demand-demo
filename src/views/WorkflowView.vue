@@ -230,7 +230,7 @@ onUnmounted(stopTimer)
 function startDeploy() {
   const d = selectedDemand.value
   if (!d) { ElMessage.warning('请先在上方列表中选择一条已审核的工单'); return }
-  if (!store.can('flow.deploy')) { ElMessage.warning('当前角色无「工作流自动化部署」权限，请切换为「生产实施方」或「平台管理员」'); return }
+  if (!store.can('flow.deploy')) { ElMessage.warning('当前角色无「工作流自动化部署」权限'); return }
 
   deployClockBase = Date.now()
   deployingDemand.value = d
@@ -455,11 +455,11 @@ function retryDeploy(rec: any) {
   <div>
     <PageHead
       title="工作流管理"
-      desc="维护业务流程模板与多级审批规则；对已审核的数据资源工单支持自动化工作流部署，自动生成对应的 API 接口以及相关文件。"
+      desc="业务流程模板与多级审批规则配置；对已审核工单执行自动化部署并归档产物。"
     >
       <template #actions>
         <el-button @click="ElMessage.info('已导出 6 套流程模板与 ' + deployRecords.length + ' 条部署记录')"><el-icon><Download /></el-icon> 导出流程清单</el-button>
-        <el-tooltip :disabled="canDeploy" content="当前角色无「工作流自动化部署」权限，请切换为「生产实施方」或「平台管理员」" placement="bottom">
+        <el-tooltip :disabled="canDeploy" content="当前角色无「工作流自动化部署」权限" placement="bottom">
           <span>
             <el-button type="primary" :disabled="!selectedDemand || !canDeploy" @click="startDeploy"><el-icon><Lightning /></el-icon> 执行自动化部署</el-button>
           </span>
@@ -625,23 +625,10 @@ function retryDeploy(rec: any) {
               </el-table>
             </div>
             <div class="card__body rule-help">
-              <div class="card__title mb-3">「条件分支」的价值</div>
+              <div class="card__title mb-3">条件分支</div>
               <div class="text-sm">
-                条件分支让同一套流程模板可以按单据的实际风险自动伸缩审批链，避免「一刀切」：
-                低风险单据走短链快速放行，高风险单据自动追加审批节点，既保证效率又不放松管控。
+                条件分支按单据属性自动伸缩审批链：低风险单据走短链，高风险单据自动追加审批节点。
               </div>
-              <div class="code-box mt-3">示例：# 资源敏感级别 ≥ L3 时增加安全审批节点
-if (demand.securityLevel >= 'L3') {
-  insertNode({
-    name: '安全合规审批',
-    role: '多级安全审批人',
-    mode: '会签',
-    slaHours: 48,
-    after: '资源管理人员复核'
-  })
-}
-// L1 / L2 → 仅走 资源归属方审批 + 资源管理人员复核（2 级）
-// L3 / L4 → 追加 安全合规审批（会签，3 级），并按分级结果强制脱敏交付</div>
             </div>
           </div>
         </el-tab-pane>
@@ -651,14 +638,14 @@ if (demand.securityLevel >= 'L3') {
           <div class="card__body">
             <div class="flex items-center gap-3 mb-3 wrap">
               <div class="card__title">数据资源工单部署队列</div>
-              <div class="card__sub">来源：需求单的「审批通过 / 实施中」状态记录，即原文所述「已审核的数据资源工单」；已部署成功的工单移入「已部署」页签</div>
+              <div class="card__sub">待部署工单来自需求单的「审批通过 / 实施中」状态；已部署成功的工单移入「已部署」页签</div>
               <span class="card__spacer" />
               <el-radio-group v-model="deployScope" size="small" @change="selectedId = ''">
                 <el-radio-button value="pending">待部署（{{ deployableDemands.length }}）</el-radio-button>
                 <el-radio-button value="done">已部署（{{ deployedDemands.length }}）</el-radio-button>
                 <el-radio-button value="all">全部</el-radio-button>
               </el-radio-group>
-              <el-tooltip :disabled="canDeploy" content="当前角色无「工作流自动化部署」权限，请切换为「生产实施方」或「平台管理员」" placement="bottom">
+              <el-tooltip :disabled="canDeploy" content="当前角色无「工作流自动化部署」权限" placement="bottom">
                 <span>
                   <el-button type="primary" :disabled="!selectedDemand || !canDeploy" @click="startDeploy"><el-icon><Lightning /></el-icon> 执行自动化部署</el-button>
                 </span>
@@ -671,7 +658,7 @@ if (demand.securityLevel >= 'L3') {
               :closable="false"
               show-icon
               title="当前角色仅可查看部署队列与部署记录"
-              description="「工作流自动化部署」权限点 flow.deploy 仅授予生产实施方与平台管理员，可在顶栏切换角色后执行。"
+              description="「工作流自动化部署」权限仅授予生产实施方与平台管理员。"
             />
 
             <el-table
@@ -884,7 +871,7 @@ if (demand.securityLevel >= 'L3') {
           :closable="false"
           show-icon
           title="产物归档说明"
-          description="每次自动化部署生成的文件（接口文档 / 调度配置 / 脱敏规则 / API 接口定义 / 交付说明）随部署记录一并归档，可在此随时查阅；需求单详情的「交付与授权」页签同步可见。"
+          description="每次自动化部署生成的文件（接口文档 / 调度配置 / 脱敏规则 / API 接口定义 / 交付说明）随部署记录一并归档，可在此随时查阅。"
         />
 
         <div class="card__title mb-2">生成的 API 接口定义</div>

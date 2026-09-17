@@ -132,11 +132,11 @@ const sourceData = computed<ChartTone[]>(() => {
 })
 
 const DIM_CARDS = computed(() => [
-  { key: 'categoryName', title: '按事件类型统计（categoryName）', data: categoryNameData.value, center: '事件单' },
-  { key: 'categoryId', title: '按事件分类统计（categoryId → 分类名称）', data: categoryIdData.value, center: '事件单' },
-  { key: 'severity', title: '按严重等级统计（severity）', data: severityData.value, center: '事件单' },
-  { key: 'status', title: '按状态统计（status）', data: statusData.value, center: '事件单' },
-  { key: 'source', title: '按来源统计（source）', data: sourceData.value, center: '事件单' }
+  { key: 'categoryName', title: '按事件类型统计', data: categoryNameData.value, center: '事件单' },
+  { key: 'categoryId', title: '按事件分类统计', data: categoryIdData.value, center: '事件单' },
+  { key: 'severity', title: '按严重等级统计', data: severityData.value, center: '事件单' },
+  { key: 'status', title: '按状态统计', data: statusData.value, center: '事件单' },
+  { key: 'source', title: '按来源统计', data: sourceData.value, center: '事件单' }
 ])
 
 /* ============================================ 视角二：按用户统计 -- */
@@ -343,7 +343,7 @@ const hours = (v: number) => (v ? `${v.toFixed(1)} h` : '—')
   <div>
     <PageHead
       title="统计分析"
-      desc="从 CMDB 的角度统计每一个项目、每一个设备的事件情况；按用户与按事件两个视角分别统计，并补充需求与交付度量指标。"
+      desc="按事件、按用户与 CMDB 三个视角统计，并附需求与交付度量指标。"
     >
       <template #actions>
         <el-button @click="router.push('/service-desk')">服务台事件统计</el-button>
@@ -377,8 +377,7 @@ const hours = (v: number) => (v ? `${v.toFixed(1)} h` : '—')
       </div>
       <div class="card__body" style="padding-top: var(--sp-3); padding-bottom: var(--sp-3)">
         <div class="text-sm muted">
-          当前筛选命中 <b class="mono">{{ scopedIncidents.length }}</b> 条事件（时间口径：
-          有 <code>__dayOffset</code> 的历史事件按相对天数换算，其余取流转时间轴首条时间，缺失时回退 SLA 到期时间 / 解决时间）。
+          当前筛选命中 <b class="mono">{{ scopedIncidents.length }}</b> 条事件。
         </div>
       </div>
     </div>
@@ -408,7 +407,7 @@ const hours = (v: number) => (v ? `${v.toFixed(1)} h` : '—')
         <div class="card">
           <div class="card__head">
             <div class="card__title">用方组织 / 用户视角</div>
-            <div class="card__sub">统计某个用方组织或某个用户的事件情况（11.1）</div>
+            <div class="card__sub">统计某个用方组织或某个用户的事件情况</div>
             <div class="card__spacer" />
             <el-button size="small" @click="exportRequester"><el-icon><Download /></el-icon> 导出</el-button>
           </div>
@@ -463,7 +462,7 @@ const hours = (v: number) => (v ? `${v.toFixed(1)} h` : '—')
                 <div class="bold mb-2">整体 SLA 达成率</div>
                 <ChartBox kind="gauge" :value="Number(slaRate.toFixed(1))" label="SLA 达成率（已解决事件）" />
                 <div class="text-xs muted" style="margin-top: var(--sp-3)">
-                  口径：SLA 达成 = 解决时间不晚于 slaDueAt；未解决事件计入未达成。
+                  SLA 达成率按已解决事件计算，未解决事件不计入达成。
                 </div>
               </div>
             </div>
@@ -555,8 +554,7 @@ const hours = (v: number) => (v ? `${v.toFixed(1)} h` : '—')
           </div>
           <div class="card__foot">
             <span class="text-sm muted">
-              口径说明：关联事件数 = 事件单 <code>ciIds</code> 命中该配置项的条数；
-              影响面 = 反向依赖该配置项的配置项数 ×2 + 关联服务数 + 关联租户数，≥10 为高、≥6 为中。
+              关联事件数按事件单关联的配置项统计；影响面综合反向依赖配置项、关联服务与关联租户计算。
             </span>
           </div>
         </div>
@@ -573,7 +571,7 @@ const hours = (v: number) => (v ? `${v.toFixed(1)} h` : '—')
         </div>
         <div class="card__body">
           <ChartBox kind="bar" :data="demandCycle" :height="240" />
-          <div class="text-xs muted mt-2">按 submittedAt → deliveredAt 的自然日天数分桶（仅统计已交付需求单）。</div>
+          <div class="text-xs muted mt-2">按提交到交付的自然日天数分桶（仅统计已交付需求单）。</div>
         </div>
       </div>
       <div class="card">
@@ -584,7 +582,7 @@ const hours = (v: number) => (v ? `${v.toFixed(1)} h` : '—')
         </div>
         <div class="card__body">
           <ChartBox kind="funnel" :data="demandFunnel" />
-          <div class="text-xs muted mt-2">按需求单流转步骤累计计数（已驳回 / 已撤回 / 已作废不计入后续环节）。</div>
+          <div class="text-xs muted mt-2">按需求单流转步骤累计计数（已驳回 / 已撤回 / 已作废不计入）。</div>
         </div>
       </div>
       <div class="card">
@@ -595,7 +593,7 @@ const hours = (v: number) => (v ? `${v.toFixed(1)} h` : '—')
         </div>
         <div class="card__body">
           <ChartBox kind="bar" :data="scoreDist" :height="240" />
-          <div class="text-xs muted mt-2">评价数据来自「评价管理」，与 M12 评价单保持一致。</div>
+          <div class="text-xs muted mt-2">评价数据来自「评价管理」的评价单。</div>
         </div>
       </div>
     </div>
@@ -650,8 +648,7 @@ const hours = (v: number) => (v ? `${v.toFixed(1)} h` : '—')
         </el-table>
       </template>
       <div class="text-xs muted mt-3">
-        可基于统计结果直接发起处置：「申报巡检事件单」会写入事件单表并自动分派，
-        「通知负责人」会下发站内信，形成"统计 → 处置"闭环。
+        可基于统计结果直接发起处置。
       </div>
       <template #footer>
         <el-button @click="noticeCiOwner"><el-icon><Promotion /></el-icon> 通知负责人</el-button>

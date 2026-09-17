@@ -245,7 +245,7 @@ function saveAuth() {
     channelAuth: { useScope: [...authDraft.useScope], visibleScope: [...authDraft.visibleScope] }
   }, { action: '配置服务渠道授权', remark: `使用范围 ${authDraft.useScope.length} 项 / 可见范围 ${authDraft.visibleScope.length} 项` })
   authDirty.value = false
-  ElMessage.success('渠道授权已保存：使用范围决定"谁可以用"，可见范围决定"谁能看到该服务"')
+  ElMessage.success('渠道授权已保存')
 }
 
 /* ------------------------------------------------------------ 密钥管理 -- */
@@ -470,7 +470,7 @@ const secretVisible = ref(false)
   <div>
     <PageHead
       title="交付与授权"
-      desc="资源订阅与审批、服务渠道授权、密钥管理、资源推送；实时服务订阅须填写需求工单号。"
+      desc="资源订阅与审批、服务渠道授权、密钥管理与资源推送。"
     >
       <template #actions>
         <el-button @click="openCreate('FILE')"><el-icon><Folder /></el-icon> 新建文件订阅</el-button>
@@ -579,7 +579,7 @@ const secretVisible = ref(false)
             <el-radio-button value="FILE">文件服务</el-radio-button>
             <el-radio-button value="REALTIME">实时服务</el-radio-button>
           </el-radio-group>
-          <div class="text-xs muted mt-1">不同订阅方式的配置项不同：文件服务配置下发任务，API 服务绑定应用与调用量，实时服务须填写需求工单号。</div>
+          <div class="text-xs muted mt-1">文件服务配置下发任务；API 服务绑定应用与调用量；实时服务须填写需求工单号。</div>
         </el-form-item>
 
         <el-form-item label="需求工单号" prop="demandNo">
@@ -589,7 +589,7 @@ const secretVisible = ref(false)
               <span class="opt-tail" :class="d.ok ? 'opt-tail--ok' : 'opt-tail--no'">{{ d.okLabel }}</span>
             </el-option>
           </el-select>
-          <div class="text-xs muted mt-1">校验规则：工单须存在且状态为「审批通过 / 实施中 / 已交付」（实时服务订阅必填）。</div>
+          <div class="text-xs muted mt-1">工单须存在且状态为「审批通过 / 实施中 / 已交付」（实时服务订阅必填）。</div>
         </el-form-item>
 
         <el-form-item label="目标服务" prop="serviceId">
@@ -705,7 +705,7 @@ const secretVisible = ref(false)
         <div class="card mb-3">
           <div class="card__head">
             <div class="card__title">订阅配置（{{ (config.dicts.ServiceKind as any)[current.kind]?.label }}）</div>
-            <div class="card__sub">不同订阅方式按原文要求配置不同字段</div>
+            <div class="card__sub">不同订阅方式需配置的字段不同</div>
           </div>
           <div class="card__body">
             <div class="desc-grid">
@@ -720,7 +720,7 @@ const secretVisible = ref(false)
         <div class="card mb-3">
           <div class="card__head">
             <div class="card__title">服务渠道授权</div>
-            <div class="card__sub">使用范围决定「谁可以使用该服务」，可见范围决定「谁能在系统中看到该服务」</div>
+            <div class="card__sub">「使用范围」＝可使用该服务的对象；「可见范围」＝可看到该服务的对象。</div>
             <span class="card__spacer" />
             <el-button size="small" type="primary" :disabled="!authDirty" @click="saveAuth">保存授权</el-button>
           </div>

@@ -644,7 +644,7 @@ function rowClass({ row }: { row: any }) {
   <div>
     <PageHead
       title="事件管理"
-      desc="多来源事件录入、按分类自动分派、知识库关键字推荐、事件升级 / 关联 / 广播与决策树分析。"
+      desc="事件录入、自动分派、处理流转、升级关联与决策树分析。"
     >
       <template #actions>
         <el-button @click="openDtree"><el-icon><Share /></el-icon> 事件决策树</el-button>
@@ -877,7 +877,7 @@ function rowClass({ row }: { row: any }) {
               <span class="text-xs muted ml-2">按「影响程度 × 紧急程度」矩阵自动推导</span>
             </el-form-item>
 
-            <el-divider content-position="left">扩展信息（覆盖数字 / 字符 / 下拉 / 布尔 / 时间 / 人员字段）</el-divider>
+            <el-divider content-position="left">扩展信息</el-divider>
             <div class="grid grid--2">
               <el-form-item label="影响用户数">
                 <el-input-number v-model="createForm.affectedUsers" :min="0" :step="10" controls-position="right" style="width: 100%" />
@@ -1115,7 +1115,7 @@ function rowClass({ row }: { row: any }) {
 
     <!-- ================================================ 关联重复事件 -- -->
     <el-dialog v-model="linkVisible" title="关联重复事件" width="700px">
-      <div class="text-sm muted mb-2">选择与本事件重复的其他事件单，系统将自动统计重复数量，并在列表与详情中显示「已关联 N 条」。</div>
+      <div class="text-sm muted mb-2">选择与本事件重复的其他事件单，保存后自动统计重复数量</div>
       <el-select v-model="linkSelection" multiple filterable placeholder="选择重复事件" style="width: 100%">
         <el-option
           v-for="it in allIncidents.filter(x => x.id !== current?.id)"
@@ -1170,7 +1170,7 @@ function rowClass({ row }: { row: any }) {
     </el-dialog>
 
     <!-- ================================================== 事件决策树 -- -->
-    <el-drawer v-model="dtreeVisible" title="事件决策树（事件分析）" size="46%">
+    <el-drawer v-model="dtreeVisible" title="事件决策树" size="46%">
       <div class="dtree__path">
         <span class="muted">已选路径：</span>
         <template v-if="!dtreePath.length"><span class="muted">（尚未选择）</span></template>

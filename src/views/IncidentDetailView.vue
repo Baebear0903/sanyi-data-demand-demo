@@ -333,7 +333,7 @@ function gotoChange() {
           <div class="card mb-4">
             <div class="card__head">
               <div class="card__title">事件基本信息</div>
-              <div class="card__sub">全字段（含扩展字段）</div>
+              <div class="card__sub">包含扩展字段</div>
             </div>
             <div class="card__body">
               <div class="desc-grid">
@@ -471,7 +471,6 @@ function gotoChange() {
                 <el-button size="small" @click="openBroadcast">事件广播</el-button>
                 <el-button size="small" type="success" :disabled="it.status === 'CLOSED'" @click="openClose">关闭</el-button>
               </div>
-              <div class="text-xs muted mt-3">操作权限按当前角色判定：服务台可受理与广播，运维可处理 / 升级 / 开单，处理动作均写入事件审计。</div>
             </div>
           </div>
 
@@ -585,7 +584,7 @@ function gotoChange() {
       <div class="card__body">
         <div class="empty-box">
           <div class="empty-box__icon"><el-icon><Search /></el-icon></div>
-          <div class="empty-box__text">未找到事件单「{{ id }}」，可能已被删除或重置</div>
+          <div class="empty-box__text">未找到事件单「{{ id }}」，请返回列表重新选择</div>
           <el-button class="mt-3" type="primary" @click="router.push('/incident/list')">返回事件列表</el-button>
         </div>
       </div>
@@ -593,7 +592,7 @@ function gotoChange() {
 
     <!-- ================================================ 关联重复事件 -- -->
     <el-dialog v-model="linkVisible" title="关联重复事件" width="700px">
-      <div class="text-sm muted mb-2">选择与本事件重复的其他事件单，系统将自动统计重复数量。</div>
+      <div class="text-sm muted mb-2">选择与本事件重复的其他事件单，保存后自动统计重复数量</div>
       <el-select v-model="linkSelection" multiple filterable placeholder="选择重复事件" style="width: 100%">
         <el-option
           v-for="x in incidents.filter(y => y.id !== it?.id)"

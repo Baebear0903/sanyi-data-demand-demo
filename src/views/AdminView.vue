@@ -218,7 +218,7 @@ function saveParams() {
     changes: [{ field: '安全审批阈值', before: '—', after: params.value.securityThreshold }],
     remark: `SLA 时限 ${params.value.slaHours}h；自动分派 ${params.value.autoAssign ? '开启' : '关闭'}；自动关闭 ${params.value.autoCloseDays} 天`
   })
-  ElMessage.success('系统参数已保存（当前为内存态，刷新后恢复默认）')
+  ElMessage.success('系统参数已保存')
 }
 </script>
 
@@ -226,7 +226,7 @@ function saveParams() {
   <div>
     <PageHead
       title="系统配置"
-      desc="角色与权限、用户与组织、租户与能力申请审核、系统参数与系统维护。"
+      desc="平台角色、权限矩阵、组织与用户、租户与能力申请、系统参数配置。"
     />
 
     <div class="card">
@@ -234,7 +234,7 @@ function saveParams() {
         <el-tabs v-model="tab">
           <!-- ============ 角色与权限 ============ -->
           <el-tab-pane label="角色与权限" name="roles">
-            <div class="section-title">角色（顶部可切换，切换后菜单与数据范围同步变化）</div>
+            <div class="section-title">角色（切换后菜单与数据范围同步变化）</div>
             <div class="grid grid--3 mb-4">
               <div v-for="r in ROLES" :key="r.id" class="role-card" :class="{ 'is-current': r.id === store.role.id }">
                 <div class="role-card__head">
@@ -255,7 +255,7 @@ function saveParams() {
               </div>
             </div>
 
-            <div class="section-title">权限点矩阵（勾选表示具备该权限，— 表示不具备；平台管理员拥有全部权限）</div>
+            <div class="section-title">权限点矩阵（✓ 表示具备该权限，— 表示不具备）</div>
             <div class="tablewrap mb-4">
               <table class="matrix">
                 <thead>
@@ -279,7 +279,7 @@ function saveParams() {
             </div>
 
             <div class="section-title">
-              服务目录权限矩阵（勾选表示该角色可申请该服务项，— 表示该角色不可申请该服务项）
+              服务目录权限矩阵（✓ 表示该角色可申请该服务项，— 表示不可申请）
               <span class="card__spacer" />
               <template v-if="!editingMatrix">
                 <el-button size="small" type="primary" plain :disabled="!canEditMatrix" @click="startEditMatrix">
@@ -296,15 +296,14 @@ function saveParams() {
             <div v-if="!canEditMatrix" class="matrix-tip">
               <el-icon><InfoFilled /></el-icon>
               当前角色「{{ store.role.name }}」为查看态：矩阵以 ✓ / — 展示各角色可申请的服务内容。
-              如需调整勾选，请切换到 <b>平台管理员</b>（具备系统配置权限）后点「编辑权限配置」。
             </div>
             <div v-else-if="!editingMatrix" class="matrix-tip matrix-tip--ok">
               <el-icon><InfoFilled /></el-icon>
-              当前角色「{{ store.role.name }}」具备系统配置权限：点右上角 <b>「编辑权限配置」</b> 即可勾选 / 取消勾选各角色可申请的服务内容，保存后立即生效。
+              当前角色「{{ store.role.name }}」具备系统配置权限，可勾选 / 取消勾选各角色可申请的服务内容，保存后立即生效。
             </div>
             <div v-else class="matrix-tip matrix-tip--edit">
               <el-icon><EditPen /></el-icon>
-              编辑态：点击单元格勾选 / 取消勾选，调整该角色可申请的服务内容；<b>保存权限配置</b>后立即生效（自助服务管理的服务目录可用项、服务卡「立即申请」按钮同步刷新）。
+              编辑态：点击单元格勾选 / 取消勾选，调整该角色可申请的服务内容；保存后立即生效。
             </div>
             <div class="tablewrap mb-4">
               <table class="matrix">
@@ -338,12 +337,11 @@ function saveParams() {
               </table>
             </div>
 
-            <div class="section-title">建设方案中的角色与职责依据（共 {{ roleMatrix.length }} 类）</div>
+            <div class="section-title">角色职责矩阵</div>
             <el-table :data="roleMatrix" size="small" style="width: 100%" class="mb-4">
               <el-table-column prop="name" label="角色" width="200" />
               <el-table-column prop="org" label="所属组织" width="200" />
               <el-table-column prop="duty" label="核心职责" min-width="260" />
-              <el-table-column prop="spec" label="职责依据" min-width="360" show-overflow-tooltip />
             </el-table>
           </el-tab-pane>
 
@@ -369,7 +367,7 @@ function saveParams() {
 
           <!-- ============ 租户与能力 ============ -->
           <el-tab-pane label="租户与能力申请" name="tenant">
-            <div class="section-title">租户注册申请（对应「能力开放门户 → 租户注册 / 租户信息审核」）</div>
+            <div class="section-title">租户注册申请</div>
             <el-table :data="tenantRegs" size="small" style="width: 100%" class="mb-4">
               <el-table-column prop="no" label="申请单号" width="140" />
               <el-table-column label="类型" width="80">
@@ -396,7 +394,7 @@ function saveParams() {
               </el-table-column>
             </el-table>
 
-            <div class="section-title">能力申请（对应「能力开放门户 → 能力申请」）</div>
+            <div class="section-title">能力申请</div>
             <el-table :data="capApplies" size="small" style="width: 100%" class="mb-4">
               <el-table-column prop="no" label="申请单号" width="140" />
               <el-table-column prop="applicant" label="申请人" width="110" />
@@ -472,9 +470,6 @@ function saveParams() {
                 <div class="card__body">
                   <p class="text-sm muted mb-3">可将业务数据一键恢复到初始状态。</p>
                   <el-button @click="store.reset(true); ElMessage.success('已重置（保留当前角色）')"><el-icon><RefreshLeft /></el-icon> 重置初始数据</el-button>
-                  <div class="fitem__hint mt-2">
-                    存储方式：{{ store.db.meta ? 'localStorage（刷新后保持操作结果）' : '内存' }}
-                  </div>
                 </div>
               </div>
               <div class="card" style="margin: 0">

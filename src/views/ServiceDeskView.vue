@@ -682,7 +682,7 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
   <div>
     <PageHead
       title="服务台管理"
-      desc="为经办机构、医疗机构以及系统运维人员提供统一工作环境：统一受理各类事件或服务请求，使记录、分派、监督通知、解决方案记录、报表统计等过程电子化、自动化。"
+      desc="统一受理各入口的服务请求：登记、分派、监督通知与回访。"
     >
       <template #actions>
         <el-button @click="router.push('/incident/list')">事件管理</el-button>
@@ -699,7 +699,7 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
         <div class="card__sub">Web 服务窗口 / 电子邮件 / 自助服务 / 客户端申报 四个入口的待受理队列</div>
         <div class="card__spacer" />
         <span v-if="!canDesk" class="text-xs" style="color: var(--warning-fg)">
-          当前角色无「服务台受理与广播」权限，操作按钮已隐藏（可在顶栏切换为服务台受理员）
+          当前角色无「服务台受理与广播」权限，操作按钮已隐藏
         </span>
         <StatusTag v-else label="具备受理权限" tone="success" :dot="false" />
       </div>
@@ -775,20 +775,19 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
     <!-- ============================================ 预定义需求类别（9.6） -- -->
     <div class="card">
       <div class="card__head">
-        <div class="card__title">预定义需求类别（{{ presetCategories.length }} 类）</div>
+        <div class="card__title">预定义需求类别</div>
         <div class="card__sub">统一受理时按预定义类别识别请求类型：不同类别展现不同界面、要求不同信息、激活不同处理流程</div>
         <div class="card__spacer" />
         <el-button size="small" type="primary" :disabled="!canConfigCatalog" @click="openCategoryDrawer">
           <el-icon><Setting /></el-icon> 配置需求类别
         </el-button>
         <el-button size="small" @click="router.push('/selfservice')">
-          <el-icon><Grid /></el-icon> 去自助服务管理查看
+          <el-icon><Grid /></el-icon> 查看自助服务门户
         </el-button>
       </div>
       <div class="card__body card__body--flush">
         <div v-if="!canConfigCatalog" class="text-xs muted" style="padding: 10px var(--sp-5) 0">
-          当前角色「{{ store.role.name }}」无「服务目录与类别配置」权限，<b>配置需求类别</b> 已置灰（配置需服务台受理员或平台管理员）；
-          本页仍可核对类别与激活流程。
+          当前角色「{{ store.role.name }}」无「服务目录与类别配置」权限，<b>配置需求类别</b> 已置灰。
         </div>
         <el-table :data="presetCategories" size="small" style="width: 100%" row-key="id">
           <el-table-column label="类别" width="96">
@@ -822,11 +821,6 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
             </template>
           </el-table-column>
         </el-table>
-        <div class="text-xs muted" style="padding: 10px var(--sp-5)">
-          入口说明：「预定义需求类别」的配置入口在本页右上角 <b>「配置需求类别」</b>（新增 / 编辑 / 删除类别、描述、界面字段与激活流程，
-          保存后自助服务管理同步生效）；自助服务管理只做申请侧展示（类别定义 + 去申请），避免同一份配置在两处维护产生歧义。
-          服务目录的「谁能申请哪个服务」在 <b>综合 → 系统配置 → 角色与权限</b> 的服务目录权限矩阵中维护。
-        </div>
       </div>
     </div>
 
@@ -834,7 +828,7 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
     <div class="card">
       <div class="card__head">
         <div class="card__title">服务概况</div>
-        <div class="card__sub">按事件类型 / 处理状态 / 处理人员 / 组织结构统计（8.1）</div>
+        <div class="card__sub">按事件类型 / 处理状态 / 处理人员 / 组织结构统计</div>
         <div class="card__spacer" />
         <el-radio-group v-model="overviewRange" size="small">
           <el-radio-button value="7">近 7 天</el-radio-button>
@@ -889,7 +883,7 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
     <div class="card">
       <div class="card__head">
         <div class="card__title">事件统计报表</div>
-        <div class="card__sub">自定义起止时间 + 小时 / 日 / 周 / 月 / 年时间梯度（8.3）</div>
+        <div class="card__sub">自定义起止时间 + 小时 / 日 / 周 / 月 / 年时间梯度</div>
         <div class="card__spacer" />
         <el-date-picker
           v-model="statRange"
@@ -935,7 +929,7 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
     <div class="card">
       <div class="card__head">
         <div class="card__title">广播通知</div>
-        <div class="card__sub">向指定人员或群组发送广播通知，支持站内信 / 电子邮件 / 短信（8.2）</div>
+        <div class="card__sub">向指定人员或群组发送广播通知，支持站内信 / 电子邮件 / 短信</div>
         <div class="card__spacer" />
         <el-button size="small" type="primary" :disabled="!canDesk" @click="openBroadcast"><el-icon><Plus /></el-icon> 发送广播</el-button>
       </div>
@@ -1002,7 +996,7 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
     <div class="card">
       <div class="card__head">
         <div class="card__title">回访调查</div>
-        <div class="card__sub">处理完毕的服务请求自动产生，由最终用户在网页上填写反馈意见与评分（8.4）</div>
+        <div class="card__sub">处理完毕的服务请求自动产生，由最终用户在网页上填写反馈意见与评分</div>
         <div class="card__spacer" />
         <el-button size="small" @click="autoCreateCallbacks"><el-icon><Refresh /></el-icon> 自动产生回访调查</el-button>
       </div>
@@ -1045,7 +1039,7 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
           </el-table-column>
           <el-table-column label="操作" width="130" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="row.status !== '已回访'" link type="primary" size="small" @click="openCallback(row)">模拟用户填写</el-button>
+              <el-button v-if="row.status !== '已回访'" link type="primary" size="small" @click="openCallback(row)">代用户填写</el-button>
               <el-button v-else link size="small" @click="openCallback(row)">查看 / 修改</el-button>
             </template>
           </el-table-column>
@@ -1091,7 +1085,7 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
     </el-dialog>
 
     <!-- ============================================== 回访调查填写弹窗 -- -->
-    <el-dialog v-model="cbDialog" title="回访调查（模拟最终用户填写）" width="560px">
+    <el-dialog v-model="cbDialog" title="回访调查（代最终用户填写）" width="560px">
       <div v-if="cbRow" class="mb-3 text-sm muted">
         工单：{{ cbRow.ticketType }} {{ cbRow.ticketNo }} · 收件人 {{ cbRow.to }} · 发送于 {{ fmtTime(cbRow.sentAt) }}
       </div>
@@ -1114,12 +1108,12 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
       <div class="drawer-body">
         <div class="text-sm muted mb-3">
           维护「故障与服务申请」的预定义类别：<b>类别 → 名称 / 描述 → 动态界面字段 → 激活的处理流程 → 可申请角色</b>。
-          保存后自助服务管理的类别表与申请抽屉同步生效；「生成单据」由类别推导，无需单独配置。
+          保存后自助服务管理的类别表与申请抽屉同步生效。
         </div>
 
         <!-- 类别清单 -->
         <div class="flex items-center gap-2 mb-2">
-          <div class="bold">类别清单（{{ presetCategories.length }} 类）</div>
+          <div class="bold">类别清单</div>
           <span class="card__spacer" />
           <el-button size="small" type="primary" @click="newCategory"><el-icon><Plus /></el-icon> 新增类别</el-button>
         </div>
@@ -1223,7 +1217,7 @@ const callbacks = computed(() => by(store.table('callbacks') as any[], 'sentAt',
                   </table>
                   <el-button size="small" class="mt-2" @click="addField"><el-icon><Plus /></el-icon> 添加字段</el-button>
                   <div class="text-xs muted mt-2">
-                    类型说明：单行文本 / 多行文本 / 数字 / 日期直接录入；下拉选择需填选项；搜索选择按字段标识自动匹配资源、服务或应用数据源。
+                    类型说明：下拉选择需填选项；搜索选择按字段自动匹配资源、服务或应用数据源。
                   </div>
                 </div>
               </el-form-item>

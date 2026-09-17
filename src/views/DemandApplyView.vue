@@ -368,7 +368,7 @@ const deliverable = computed(() => {
   <div>
     <PageHead
       title="需求申请管理"
-      desc="在目录系统的基础上，提高数据分享的高效性、安全性、便捷性；已有资产提供安全的数据访问方式，新增资产通过关联任务派发采集、加工、建模。"
+      desc="4 步向导提交数据资源需求：已有资产直接申请，新增资产派发采集 / 加工 / 建模任务。"
     >
       <template #actions>
         <el-button @click="router.push('/demand/list')">需求单管理</el-button>
@@ -447,7 +447,7 @@ const deliverable = computed(() => {
             <div v-else-if="form.method === 'NEW'" class="mt-4">
               <el-alert type="warning" :closable="false" show-icon class="mb-3"
                 title="新增资产需求：主题库尚未覆盖，提交后由生产部门派发采集 / 加工 / 建模任务"
-                description="请在下方描述需要新增的数据项与来源系统；提交审批通过后，可在需求单详情中派发任务单（数据采集 / 数据加工 / 数据建模）。" />
+                description="请在下方描述需要新增的数据项与来源系统。" />
               <div class="field mb-3">
                 <span class="field__label">需求名称</span>
                 <el-input v-model="form.title" placeholder="如：新增采集需求-药品流通与采购信息" style="width: 420px" />
@@ -683,14 +683,13 @@ const deliverable = computed(() => {
                 <el-upload :auto-upload="false" :show-file-list="false" multiple>
                   <el-button plain><el-icon><Plus /></el-icon> 选择文件</el-button>
                 </el-upload>
-                <span class="text-xs muted">不做真实上传，仅登记依据文件清单</span>
               </div>
               <div v-if="form.files.length" class="file-list">
                 <div v-for="f in form.files" :key="f" class="file-item">
                   <div class="file-item__icon" :class="fileIcon(f)">{{ (f.split('.').pop() || 'txt').slice(0, 4).toUpperCase() }}</div>
                   <div class="file-item__main">
                     <div class="file-item__name">{{ f }}</div>
-                    <div class="file-item__meta">依据文件 · 未真实上传</div>
+                    <div class="file-item__meta">依据文件</div>
                   </div>
                   <el-button link type="danger" size="small" @click="form.files = form.files.filter(x => x !== f)">移除</el-button>
                 </div>
@@ -806,11 +805,11 @@ const deliverable = computed(() => {
 
             <el-alert class="mt-4" type="info" :closable="false" show-icon
               title="提交后流转：服务台受理 → 资源归属方审批 → 数据资源管理人员复核 →（敏感级别 ≥ L3 时）安全合规审批 → 派发实施"
-              description="可在「需求单管理」中实时查看流转状态，未审核前可撤回。" />
+              description="未审核前可撤回。" />
           </div>
           <div class="card__foot">
             <span class="text-sm muted">
-              提交后生成需求单号（XQ + 日期 + 序号），并通知服务台角色受理
+              提交后自动生成需求单号并通知服务台受理
             </span>
             <span class="card__spacer" />
             <el-button @click="submit(true)">存为草稿</el-button>
@@ -830,7 +829,7 @@ const deliverable = computed(() => {
         <div class="card mb-4">
           <div class="card__head">
             <div class="card__title">分类分级与脱敏预览</div>
-            <div class="card__sub">对接数据分类分级系统</div>
+            <div class="card__sub">来源：数据分类分级结果</div>
           </div>
           <div class="card__body">
             <div v-if="!classificationOf.length" class="empty-box">
@@ -877,7 +876,7 @@ const deliverable = computed(() => {
         <div class="card">
           <div class="card__head">
             <div class="card__title">样例数据预览</div>
-            <div class="card__sub">按配置规则在前端脱敏后展示</div>
+            <div class="card__sub">敏感字段已脱敏展示</div>
           </div>
           <div class="card__body card__body--flush">
             <div v-if="!sampleCols.length" class="empty-box">
@@ -907,7 +906,7 @@ const deliverable = computed(() => {
               </div>
             </div>
             <div class="text-xs muted" style="margin: var(--sp-3) var(--sp-4)">
-              样例数据来源于资源目录对接的样例集，原始值不可见；<span class="masked">灰色标记</span>字段为按分类分级脱敏算法处理后展示。
+              样例数据取自资源目录对接样例集，原始值不可见；<span class="masked">灰色标记</span>字段为脱敏后展示。
             </div>
           </div>
         </div>

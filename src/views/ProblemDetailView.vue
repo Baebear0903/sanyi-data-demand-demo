@@ -319,7 +319,7 @@ function submitRelease() {
 
     <div v-if="!p" class="empty-box">
       <div class="empty-box__icon"><el-icon><DocumentRemove /></el-icon></div>
-      <div class="empty-box__text">未找到问题单（可能已被重置），请返回列表重新选择</div>
+      <div class="empty-box__text">未找到问题单，请返回列表重新选择</div>
     </div>
 
     <template v-else>
@@ -487,7 +487,7 @@ function submitRelease() {
                   {{ rel.no }} · {{ String(rel.title).slice(0, 18) }}
                 </el-button>
               </div>
-              <div v-else class="text-sm muted">尚未创建发布申请（可点右上角「创建发布申请」，由本问题驱动发布根治版本）</div>
+              <div v-else class="text-sm muted">尚未创建发布申请</div>
             </div>
           </div>
         </div>
@@ -599,7 +599,7 @@ function submitRelease() {
         </el-form-item>
         <el-form-item label="条目内容"><el-input v-model="kbForm.content" type="textarea" :rows="7" /></el-form-item>
         <el-form-item label="提交后状态">
-          <StatusTag dict="" label="待审核（PENDING_REVIEW）" tone="warning" />
+          <StatusTag dict="" label="待审核" tone="warning" />
           <span class="text-xs muted" style="margin-left: 8px">需知识库维护责任人审核后发布。</span>
         </el-form-item>
       </el-form>

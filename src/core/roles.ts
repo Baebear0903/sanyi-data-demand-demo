@@ -24,7 +24,6 @@ export interface RoleMatrixRow {
   name: string
   org: string
   duty: string
-  spec: string
 }
 
 export const roles: Role[] = config.roles

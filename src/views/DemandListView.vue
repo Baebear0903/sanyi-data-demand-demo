@@ -227,7 +227,7 @@ function exportList() {
   <div>
     <PageHead
       title="需求单管理"
-      desc="对前置单位申请的数据资源提交的资源单进行流程审批与监控，支持实时查看需求单流转状态。"
+      desc="需求单的多维筛选、审批与流转状态查看。"
     >
       <template #actions>
         <el-button @click="exportList"><el-icon><Download /></el-icon> 导出</el-button>
@@ -275,7 +275,7 @@ function exportList() {
           <el-tooltip
             v-if="scopeRestricted"
             :disabled="!(scopeMode === 'role' && hiddenByScope > 0)"
-            :content="`本组织外还有 ${hiddenByScope} 条符合条件的需求单，切到「全部」即可查看`"
+            :content="`本组织外还有 ${hiddenByScope} 条符合条件的需求单`"
             placement="bottom"
           >
             <el-radio-group v-model="scopeMode" size="small" :class="{ 'is-hint': scopeMode === 'role' && hiddenByScope > 0 }" @change="page = 1">
@@ -377,9 +377,6 @@ function exportList() {
             <el-button type="primary" class="mt-2" @click="scopeMode = 'all'; page = 1">
               切换为「全部」查看这 {{ hiddenByScope }} 条
             </el-button>
-            <div class="text-xs muted mt-2">
-              供数方（资源归属方）的可见范围＝本人/本组织提交，或申请资源归属本组织的需求单
-            </div>
           </div>
           <div v-else class="empty-box">
             <div class="empty-box__icon"><el-icon><DocumentRemove /></el-icon></div>
@@ -393,8 +390,8 @@ function exportList() {
         <span class="text-sm muted">
           共 <b>{{ scoped.length }}</b> 条
           <template v-if="scopeRestricted && scopeMode === 'role'">
-            （当前角色数据范围为「本组织」：本人/本组织提交，或申请资源归属本组织的需求单
-            <template v-if="hiddenByScope > 0">；另有 <b>{{ hiddenByScope }}</b> 条需切换为「全部」查看</template>）
+            （当前数据范围：本组织
+            <template v-if="hiddenByScope > 0">；另有 <b>{{ hiddenByScope }}</b> 条在其他组织</template>）
           </template>
         </span>
         <span class="card__spacer" />

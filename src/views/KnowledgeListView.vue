@@ -410,7 +410,7 @@ async function onCreateFiles(e: Event) {
   uploading.value = true
   try {
     for (const f of files) createForm.attachments.push(await readFileAsAttachment(f))
-    ElMessage.success(`已添加 ${files.length} 个附件（已抽取可检索文本，支持中文附件内容搜索）`)
+    ElMessage.success(`已添加 ${files.length} 个附件`)
   } finally {
     uploading.value = false
     input.value = ''
@@ -421,7 +421,7 @@ function addCreateSample() {
   const n = createForm.attachments.length + 1
   createForm.attachments.push(sampleAttachment(['pdf', 'word', 'txt', 'xlsx', 'ppt'][n % 5] as any,
     createForm.title.trim() || '知识条目', '附件内容检索'))
-  ElMessage.success('已添加示例附件（可直接用于演示「附件内容检索」）')
+  ElMessage.success('已添加示例附件')
 }
 function removeCreateAttach(i: number) { createForm.attachments.splice(i, 1) }
 
@@ -441,7 +441,7 @@ async function onDetailFiles(e: Event) {
     store.update('knowledges', k.id, { attachments: [...list(k.attachments), ...added] },
       { action: '上传知识附件', remark: added.map(a => a.name).join('、') })
     store.pushTimeline(k, { action: '新增附件', comment: added.map(a => `${a.name}（${a.type.toUpperCase()} · ${a.size}）`).join('、') })
-    ElMessage.success(`已上传 ${added.length} 个附件，可在「附件内容检索」中按内容命中`)
+    ElMessage.success(`已上传 ${added.length} 个附件`)
   } finally {
     uploading.value = false
     input.value = ''
@@ -495,9 +495,9 @@ function cmd(command: string, value?: string) {
 function insertImage() {
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="120">'
     + '<rect x="1" y="1" width="358" height="118" rx="6" fill="#eef3f9" stroke="#b9cde4"/>'
-    + '<text x="180" y="66" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#1f4e8c">图片占位（知识条目可嵌入图片）</text></svg>'
+    + '<text x="180" y="66" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#1f4e8c">知识条目配图</text></svg>'
   insertHtml(`<img src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}" alt="图片" />`)
-  ElMessage.success('已插入图片（内联 SVG 占位图）')
+  ElMessage.success('已插入图片')
 }
 /** 知识文档之间的引用：插入 [[知识:标题]]，渲染为可点击跳转链接 */
 function insertKnowledgeRef() {
@@ -547,7 +547,7 @@ function saveKnowledge() {
 
 <template>
   <div>
-    <PageHead title="知识库管理" desc="知识库是两大基础数据库之一：通过知识条目的创建 / 审核 / 发布 / 撤回规范管理，提高故障的一线解决率。">
+    <PageHead title="知识库管理" desc="知识条目的创建、审核、发布、撤回与附件内容检索。">
       <template #actions>
         <el-button @click="router.push('/kb/qna')"><el-icon><ChatDotRound /></el-icon> 知识问答管理</el-button>
         <el-button type="primary" @click="openCreate"><el-icon><Plus /></el-icon> 新建知识条目</el-button>
@@ -616,8 +616,7 @@ function saveKnowledge() {
         </div>
 
         <div v-if="f.scope === 'ATTACH'" class="text-xs muted" style="margin: 12px 20px 0">
-          当前为「附件内容检索」：在附件的可检索文本（contentText）中匹配关键字，支持中文附件内容搜索（pdf / word / ppt / txt / xlsx），
-          命中的附件名会在结果中高亮显示。附件在「新建知识条目 → 附件」或知识条目详情 →「上传附件」中添加，也可用「添加示例附件」快速演示。
+          当前为「附件内容检索」：在附件内容中匹配关键字，支持中文附件内容搜索（pdf / word / ppt / txt / xlsx），命中的附件名会高亮显示。
         </div>
 
         <div class="card__body card__body--flush">
@@ -732,7 +731,7 @@ function saveKnowledge() {
               </div>
             </div>
             <div v-else class="empty-box">
-              <div class="empty-box__text">该知识条目暂无附件——点右上角「上传附件」选择本地文件，或用「添加示例附件」快速演示</div>
+              <div class="empty-box__text">该知识条目暂无附件</div>
             </div>
           </div>
         </div>
@@ -810,7 +809,7 @@ function saveKnowledge() {
     <!-- ------------------------------------------------- 知识分类管理 -- -->
     <el-dialog v-model="catOpen" title="知识分类管理" width="920px" top="6vh">
       <div class="text-xs muted mb-3">
-        可直接修改分类名称与维度；同级内用「上移 / 下移」调整展示顺序；点「保存」统一生效并写入审计留痕。
+        可直接修改分类名称与维度；同级内用「上移 / 下移」调整展示顺序。
       </div>
       <el-table
         :data="catDraft" row-key="id" default-expand-all size="small" style="width: 100%"
@@ -927,8 +926,8 @@ function saveKnowledge() {
         </el-form-item>
 
         <el-form-item label="保存状态">
-          <StatusTag dict="" label="草稿（DRAFT）" tone="neutral" />
-          <span class="text-xs muted" style="margin-left: 8px">保存后可提交审核 → 审核通过发布 / 撤回，符合知识条目规范管理流程。</span>
+          <StatusTag dict="" label="草稿" tone="neutral" />
+          <span class="text-xs muted" style="margin-left: 8px">保存后可提交审核 → 审核通过发布 / 撤回。</span>
         </el-form-item>
       </el-form>
       <template #footer>
