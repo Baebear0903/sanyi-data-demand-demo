@@ -309,7 +309,16 @@ function retryPush(sub: any, log: any) {
   ElMessage.success(`已对「${log.target}」执行补推，共 ${log.rows} 条记录`)
 }
 
+/**
+ * 退订权限（列表行操作与详情面板同一口径）：
+ * 持有「发起需求申请」权限，或该订阅挂的是本人应用。
+ */
+function canUnsub(sub: any): boolean {
+  return store.can('demand.apply') || sub?.appId === (apps.value.find(a => store.isMine(a.owner))?.id ?? '')
+}
+
 function pushNow(sub: any) {
+  if (!store.can('demand.deliver')) { ElMessage.warning('当前角色无资源推送权限'); return }
   const svc = svcOf(sub.serviceId)
   const r = svc ? store.findById('resources', svc.resourceId) as any : null
   const sensitive = ['L3', 'L4'].includes(r?.securityLevel ?? '')
@@ -397,6 +406,7 @@ async function reject(sub: any) {
 }
 
 async function unsubscribe(sub: any) {
+  if (!canUnsub(sub)) { ElMessage.warning('当前角色无退订权限（仅申请人本人或具备交付权限的角色可退订）'); return }
   try {
     const { value } = await ElMessageBox.prompt('请填写退订原因', `退订订阅单 ${sub.no}`, {
       confirmButtonText: '确认退订', cancelButtonText: '取消', inputType: 'textarea',
@@ -421,7 +431,7 @@ function actionsOf(sub: any) {
     out.push({ label: '审批订阅', type: 'primary', run: () => approve(sub) })
     out.push({ label: '驳回', run: () => reject(sub) })
   }
-  if (['APPROVED', 'PENDING'].includes(sub.approveStatus) && (store.can('demand.apply') || sub.appId === (apps.value.find(a => store.isMine(a.owner))?.id ?? ''))) {
+  if (['APPROVED', 'PENDING'].includes(sub.approveStatus) && canUnsub(sub)) {
     out.push({ label: '退订', run: () => unsubscribe(sub) })
   }
   out.push({ label: '详情', run: () => openDetail(sub) })
@@ -680,7 +690,7 @@ const secretVisible = ref(false)
           <span class="card__spacer" />
           <el-button v-if="current.approveStatus === 'PENDING' && (store.can('demand.approve') || store.can('demand.deliver'))" type="primary" size="small" @click="approve(current)">审批订阅</el-button>
           <el-button v-if="current.approveStatus === 'PENDING' && (store.can('demand.approve') || store.can('demand.deliver'))" size="small" @click="reject(current)">驳回</el-button>
-          <el-button v-if="current.approveStatus === 'APPROVED'" size="small" @click="unsubscribe(current)">退订</el-button>
+          <el-button v-if="current.approveStatus === 'APPROVED'" size="small" :disabled="!canUnsub(current)" @click="unsubscribe(current)">退订</el-button>
         </div>
 
         <div class="card mb-3">
@@ -780,7 +790,7 @@ const secretVisible = ref(false)
             <div class="card__title">资源推送记录</div>
             <div class="card__sub">敏感资源走 SFTP 通道；实时服务订购后自动组装并推送</div>
             <span class="card__spacer" />
-            <el-button size="small" type="primary" plain @click="pushNow(current)">立即推送</el-button>
+            <el-button size="small" type="primary" plain :disabled="!store.can('demand.deliver')" @click="pushNow(current)">立即推送</el-button>
           </div>
           <div class="card__body card__body--flush">
             <el-table :data="arr(current.pushLogs)" size="small" style="width: 100%">

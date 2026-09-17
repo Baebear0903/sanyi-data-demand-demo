@@ -89,8 +89,12 @@ const bcForm = reactive({ title: '', content: '', groups: ['全部用户'], chan
 const closeVisible = ref(false)
 const closeForm = reactive({ closeType: '一线解决', comment: '' })
 
+/** 事件处理权限（与 requireHandle 同口径）：同时用于按钮置灰与写入前复核 */
+const canHandle = computed(() =>
+  store.can('incident.handle') || store.can('incident.dispatch') || store.can('desk.manage'))
+
 function requireHandle() {
-  if (!store.can('incident.handle') && !store.can('incident.dispatch') && !store.can('desk.manage')) {
+  if (!canHandle.value) {
     ElMessage.warning('当前角色无事件处理权限')
     return false
   }
@@ -153,7 +157,7 @@ function openLink() {
 }
 function saveLink() {
   const cur = it.value
-  if (!cur) return
+  if (!cur || !requireHandle()) return
   store.update('incidents', cur.id, { relatedIncidentIds: [...linkSelection.value] }, {
     action: '关联重复事件', remark: `关联 ${linkSelection.value.length} 条重复事件`
   })
@@ -229,7 +233,7 @@ function openBroadcast() {
 }
 function saveBroadcast() {
   const cur = it.value
-  if (!cur) return
+  if (!cur || !requireHandle()) return
   if (!bcForm.title || !bcForm.content) { ElMessage.warning('请填写广播标题与内容'); return }
   const no = `GB${nowStamp()}${String((store.table('broadcasts') as any[]).length + 1).padStart(3, '0')}`
   const b = store.insert('broadcasts', {
@@ -257,7 +261,7 @@ function openClose() {
 }
 function saveClose() {
   const cur = it.value
-  if (!cur) return
+  if (!cur || !requireHandle()) return
   store.update('incidents', cur.id, { status: 'CLOSED', closeType: closeForm.closeType, closedAt: iso() }, {
     action: '关闭事件', remark: `关闭方式：${closeForm.closeType}；${closeForm.comment}`
   })
@@ -293,9 +297,9 @@ function gotoChange() {
         </template>
         <template #actions>
           <el-button @click="router.push('/incident/list')"><el-icon><ArrowLeft /></el-icon> 返回列表</el-button>
-          <el-button @click="openLink">关联重复事件</el-button>
-          <el-button @click="openBroadcast">事件广播</el-button>
-          <el-button type="primary" :disabled="CLOSED_STATUS.includes(it.status)" @click="doResolve">解决</el-button>
+          <el-button :disabled="!canHandle" @click="openLink">关联重复事件</el-button>
+          <el-button :disabled="!canHandle" @click="openBroadcast">事件广播</el-button>
+          <el-button type="primary" :disabled="!canHandle || CLOSED_STATUS.includes(it.status)" @click="doResolve">解决</el-button>
         </template>
       </PageHead>
 
@@ -465,11 +469,11 @@ function gotoChange() {
                 <el-button size="small" :disabled="!['DISPATCHED', 'ESCALATED'].includes(it.status)" @click="doProcessing">处理中</el-button>
                 <el-button size="small" type="primary" :disabled="CLOSED_STATUS.includes(it.status)" @click="doResolve">解决</el-button>
                 <el-button size="small" type="warning" plain :disabled="CLOSED_STATUS.includes(it.status)" @click="doEscalate">升级</el-button>
-                <el-button size="small" @click="openLink">关联重复事件</el-button>
+                <el-button size="small" :disabled="!canHandle" @click="openLink">关联重复事件</el-button>
                 <el-button size="small" @click="createProblem">开出问题单</el-button>
                 <el-button size="small" @click="createChange">开出变更单</el-button>
-                <el-button size="small" @click="openBroadcast">事件广播</el-button>
-                <el-button size="small" type="success" :disabled="it.status === 'CLOSED'" @click="openClose">关闭</el-button>
+                <el-button size="small" :disabled="!canHandle" @click="openBroadcast">事件广播</el-button>
+                <el-button size="small" type="success" :disabled="!canHandle || it.status === 'CLOSED'" @click="openClose">关闭</el-button>
               </div>
             </div>
           </div>

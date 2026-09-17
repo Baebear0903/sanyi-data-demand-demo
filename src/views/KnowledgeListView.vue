@@ -70,6 +70,8 @@ function clearCat() {
 const CAT_DIMS = ['产品', '用户群', '业务领域', '地点']
 /** 与「知识条目编辑」同权限：能维护知识条目的人即可维护其分类 */
 const canConfigCat = computed(() => store.can('kb.write'))
+/** 知识条目编辑权限（kb.write）：新建条目、保存、提交审核均按此收口 */
+const canWrite = computed(() => store.can('kb.write'))
 
 /**
  * 分类管理：一个入口 + 一个弹窗，对整棵目录做增删改与排序。
@@ -290,6 +292,25 @@ function openDetail(k: any) {
   store.update('knowledges', k.id, { refCount: Number(k.refCount || 0) + 1 }, { action: '引用计数 +1', skipAudit: true })
 }
 
+/**
+ * 双向关联（与正文里的正向引用 [[知识:标题]] 互为反向）：
+ *  · relatedOut —— 本条关联到的其他知识条目（entry.relatedIds，原先只写不显示）
+ *  · backlinks  —— 引用本条的其他条目 = relatedIds 指回本条目 + 正文里写了 [[知识:本条目标题]]
+ * 两者都是按 id / 标题现算，不额外落库，不会与正文漂移。
+ */
+const relatedOut = computed<any[]>(() =>
+  (list(current.value?.relatedIds) as string[])
+    .map(id => knowledges.value.find(k => k.id === id))
+    .filter(Boolean))
+
+const backlinks = computed<any[]>(() => {
+  const cur = current.value
+  if (!cur) return []
+  const ref = `[[知识:${cur.title}]]`
+  return knowledges.value.filter(k =>
+    k.id !== cur.id && (list(k.relatedIds).includes(cur.id) || String(k.contentHtml ?? '').includes(ref)))
+})
+
 /** 内容渲染：清洗 + 知识文档之间的引用转为可点击链接 */
 const rendered = computed(() => {
   const k = current.value
@@ -366,6 +387,7 @@ function submitComment() {
 
 /* ------------------------------------------------- 知识条目管理流程 -- */
 function submitReview(k: any) {
+  if (!canWrite.value) { ElMessage.warning('当前角色无「知识条目编辑」权限'); return }
   store.update('knowledges', k.id, { status: 'PENDING_REVIEW' }, { action: '提交审核', remark: '知识条目进入待审核' })
   store.pushTimeline(k, { action: '提交审核', comment: '按知识条目管理流程提交知识库维护责任人审核' })
   store.notify({ type: 'info', title: `知识条目 ${k.no} 待审核`, body: `《${k.title}》已提交审核，请维护责任人 ${k.owner} 审核发布。`, toRoles: ['ops', 'admin'], link: '/kb/list' })
@@ -508,6 +530,7 @@ function insertKnowledgeRef() {
 }
 
 function openCreate() {
+  if (!canWrite.value) { ElMessage.warning('当前角色无「知识条目编辑」权限'); return }
   Object.assign(createForm, { title: '', categoryId: 'kc011', owner: users.value[0]?.name ?? store.user.name, contentText: '' })
   refPickId.value = ''
   createForm.attachments = []
@@ -515,6 +538,7 @@ function openCreate() {
   nextTick(() => { if (editorRef.value) editorRef.value.innerHTML = '' })
 }
 function saveKnowledge() {
+  if (!canWrite.value) { ElMessage.warning('当前角色无「知识条目编辑」权限'); return }
   const el = editorRef.value
   const html = el ? el.innerHTML : ''
   const text = el ? (el.innerText || '').replace(/\s+/g, ' ').trim() : ''
@@ -550,7 +574,7 @@ function saveKnowledge() {
     <PageHead title="知识库管理" desc="知识条目的创建、审核、发布、撤回与附件内容检索。">
       <template #actions>
         <el-button @click="router.push('/kb/qna')"><el-icon><ChatDotRound /></el-icon> 知识问答管理</el-button>
-        <el-button type="primary" @click="openCreate"><el-icon><Plus /></el-icon> 新建知识条目</el-button>
+        <el-button type="primary" :disabled="!canWrite" @click="openCreate"><el-icon><Plus /></el-icon> 新建知识条目</el-button>
       </template>
     </PageHead>
 
@@ -660,7 +684,7 @@ function saveKnowledge() {
             <el-table-column label="操作" width="160" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" size="small" @click.stop="openDetail(row)">查看</el-button>
-                <el-button v-if="row.status === 'DRAFT'" link size="small" @click.stop="submitReview(row)">提交审核</el-button>
+                <el-button v-if="row.status === 'DRAFT'" link size="small" :disabled="!canWrite" @click.stop="submitReview(row)">提交审核</el-button>
                 <el-button v-if="row.status === 'PENDING_REVIEW' && store.can('kb.review')" link type="success" size="small" @click.stop="approveKb(row)">审核通过</el-button>
                 <el-button v-if="row.status === 'PUBLISHED' && store.can('kb.review')" link type="danger" size="small" @click.stop="withdrawKb(row)">撤回</el-button>
               </template>
@@ -690,7 +714,7 @@ function saveKnowledge() {
           <span class="text-sm muted">引用次数：<b>{{ current.refCount }}</b></span>
           <span class="text-sm muted">平均评分：<b>{{ ratingStats.avg ? ratingStats.avg.toFixed(1) : '暂无' }}</b></span>
           <span class="card__spacer" />
-          <el-button v-if="current.status === 'DRAFT'" size="small" type="primary" @click="submitReview(current)">提交审核</el-button>
+          <el-button v-if="current.status === 'DRAFT'" size="small" type="primary" :disabled="!canWrite" @click="submitReview(current)">提交审核</el-button>
           <el-button v-if="current.status === 'PENDING_REVIEW' && store.can('kb.review')" size="small" type="success" @click="approveKb(current)">审核通过并发布</el-button>
           <el-button v-if="current.status === 'PENDING_REVIEW' && store.can('kb.review')" size="small" @click="withdrawKb(current)">撤回</el-button>
           <el-button v-if="current.status === 'PUBLISHED' && store.can('kb.review')" size="small" @click="withdrawKb(current)">撤回</el-button>
@@ -781,6 +805,27 @@ function saveKnowledge() {
                 <el-button type="primary" size="small" @click="submitComment">发表评论</el-button>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- 双向关联：出向（本条关联到）+ 入向（被引用），与正文 [[知识:标题]] 正向引用互为反向 -->
+        <div class="card mt-4">
+          <div class="card__head">
+            <span class="card__title">关联条目（{{ relatedOut.length }} / {{ backlinks.length }}）</span>
+            <span class="card__sub">本条关联到 · 被以下条目引用</span>
+          </div>
+          <div class="card__body">
+            <div class="text-xs muted mb-2">本条关联到</div>
+            <div v-if="relatedOut.length" class="flex wrap gap-2">
+              <el-button v-for="k in relatedOut" :key="k.id" link type="primary" @click="openDetail(k)">{{ k.title }}</el-button>
+            </div>
+            <div v-else class="text-sm muted">暂无关联条目</div>
+
+            <div class="text-xs muted mb-2 mt-3">被以下条目引用</div>
+            <div v-if="backlinks.length" class="flex wrap gap-2">
+              <el-button v-for="k in backlinks" :key="k.id" link type="primary" @click="openDetail(k)">{{ k.title }}</el-button>
+            </div>
+            <div v-else class="text-sm muted">暂无其他条目引用本条目</div>
           </div>
         </div>
 
@@ -932,7 +977,7 @@ function saveKnowledge() {
       </el-form>
       <template #footer>
         <el-button @click="createVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveKnowledge">保存为草稿</el-button>
+        <el-button type="primary" :disabled="!canWrite" @click="saveKnowledge">保存为草稿</el-button>
       </template>
     </el-dialog>
   </div>

@@ -79,6 +79,8 @@ const filtered = computed(() => {
 })
 
 const canApprove = computed(() => store.can('eval.approve'))
+/** 提交评价权限（eval.submit）：仅评价发起方（用数方）与平台管理员 */
+const canSubmit = computed(() => store.can('eval.submit'))
 const isSupplierRole = computed(() => store.role.id === 'supplier' || store.role.id === 'admin')
 
 /* ======================================================== 提交评价 -- */
@@ -92,6 +94,7 @@ const evaluableDemands = computed(() =>
 )
 
 function openEvaluate() {
+  if (!canSubmit.value) { ElMessage.warning('当前角色无「提交评价」权限'); return }
   const first = evaluableDemands.value[0]
   evalForm.demandId = first?.id ?? ''
   evalForm.score = 5
@@ -101,6 +104,7 @@ function openEvaluate() {
 }
 
 function submitEvaluation() {
+  if (!canSubmit.value) { ElMessage.warning('当前角色无「提交评价」权限'); return }
   const d = store.findById('demands', evalForm.demandId)
   if (!d) { ElMessage.warning('请选择要评价的需求单'); return }
   if (!evalForm.content.trim()) { ElMessage.warning('请填写评价内容'); return }
@@ -285,7 +289,7 @@ function exportList() {
     >
       <template #actions>
         <el-button @click="exportList"><el-icon><Download /></el-icon> 导出</el-button>
-        <el-button type="primary" @click="openEvaluate"><el-icon><Plus /></el-icon> 提交评价</el-button>
+        <el-button type="primary" :disabled="!canSubmit" @click="openEvaluate"><el-icon><Plus /></el-icon> 提交评价</el-button>
       </template>
     </PageHead>
 
@@ -467,7 +471,7 @@ function exportList() {
       </el-form>
       <template #footer>
         <el-button @click="evalDialog = false">取消</el-button>
-        <el-button type="primary" @click="submitEvaluation">提交评价</el-button>
+        <el-button type="primary" :disabled="!canSubmit" @click="submitEvaluation">提交评价</el-button>
       </template>
     </el-dialog>
 

@@ -325,6 +325,7 @@ function tenantName(id: string): string {
 }
 
 function approveSub(s: any) {
+  if (!store.can('demand.approve')) { ElMessage.warning('当前角色无订阅审批权限'); return }
   store.update('subscriptions', s.id, { approveStatus: 'APPROVED', approver: store.user.name, approvedAt: iso() },
     { action: '订阅审批通过', bizType: 'subscriptions', remark: `需求单 ${d.value.no} 交付订阅审批` })
   store.notify({
@@ -336,6 +337,7 @@ function approveSub(s: any) {
 }
 
 function issueSecret(s: any) {
+  if (!store.can('demand.deliver')) { ElMessage.warning('当前角色无密钥管理权限'); return }
   const key = `AK${nowStamp()}${String(store.table('subscriptions').length + 1).padStart(3, '0')}`
   store.update('subscriptions', s.id, {
     secret: { appKey: key, appSecret: 'SK******************' + Math.random().toString(36).slice(-4), issuedAt: iso(), reissued: !!s.secret }
@@ -344,6 +346,7 @@ function issueSecret(s: any) {
 }
 
 function pushData(s: any) {
+  if (!store.can('demand.deliver')) { ElMessage.warning('当前角色无数据推送权限'); return }
   const rec = {
     at: iso(), target: appName(s.appId), mode: '数据推送',
     transport: s.kind === 'REALTIME' ? 'Flink' : s.kind === 'FILE' ? 'SFTP' : 'API',
@@ -702,9 +705,9 @@ onMounted(() => {
             <StatusTag dict="ServiceKind" :value="s.kind" :dot="false" />
             <StatusTag dict="SubscriptionStatus" :value="s.approveStatus" />
             <div class="card__spacer" />
-            <el-button v-if="s.approveStatus === 'PENDING'" type="primary" size="small" @click="approveSub(s)">审批订阅</el-button>
-            <el-button v-if="s.approveStatus === 'APPROVED'" size="small" @click="issueSecret(s)">{{ s.secret ? '补发密钥' : '发放密钥' }}</el-button>
-            <el-button v-if="s.approveStatus === 'APPROVED'" size="small" type="primary" plain @click="pushData(s)">执行推送</el-button>
+            <el-button v-if="s.approveStatus === 'PENDING'" type="primary" size="small" :disabled="!store.can('demand.approve')" @click="approveSub(s)">审批订阅</el-button>
+            <el-button v-if="s.approveStatus === 'APPROVED'" size="small" :disabled="!store.can('demand.deliver')" @click="issueSecret(s)">{{ s.secret ? '补发密钥' : '发放密钥' }}</el-button>
+            <el-button v-if="s.approveStatus === 'APPROVED'" size="small" type="primary" plain :disabled="!store.can('demand.deliver')" @click="pushData(s)">执行推送</el-button>
           </div>
           <div class="card__body">
             <div class="desc-grid">

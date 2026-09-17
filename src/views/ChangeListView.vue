@@ -152,6 +152,7 @@ function nextChangeNo(): string {
 }
 
 function createChange(submitNow: boolean) {
+  if (!store.can('demand.change')) { ElMessage.warning('当前角色无「发起需求变更」权限'); return }
   if (!cf.title.trim()) { ElMessage.warning('请填写变更标题'); return }
   if (!cf.demandId) { ElMessage.warning('请选择关联需求单（变更必须可追溯到需求）'); return }
   if (!cf.resources.length) { ElMessage.warning('请选择变更涉及的资源'); return }
@@ -499,7 +500,7 @@ function actionsOf(c: any): { label: string; type?: string; run: () => void }[] 
     >
       <template #actions>
         <el-button @click="router.push('/change/calendar')"><el-icon><Calendar /></el-icon> 可视化变更窗口</el-button>
-        <el-button type="primary" @click="openCreate"><el-icon><Plus /></el-icon> 新建变更单</el-button>
+        <el-button type="primary" :disabled="!store.can('demand.change')" @click="openCreate"><el-icon><Plus /></el-icon> 新建变更单</el-button>
       </template>
     </PageHead>
 

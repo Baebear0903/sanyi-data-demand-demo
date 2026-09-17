@@ -427,7 +427,7 @@ function openLink() {
 }
 function saveLink() {
   const it = current.value
-  if (!it) return
+  if (!it || !requireHandle()) return
   store.update('incidents', it.id, { relatedIncidentIds: [...linkSelection.value] }, {
     action: '关联重复事件',
     remark: `关联 ${linkSelection.value.length} 条重复事件（系统自动统计重复数量）`
@@ -517,7 +517,7 @@ function openBroadcast() {
 }
 function saveBroadcast() {
   const it = current.value
-  if (!it) return
+  if (!it || !requireHandle()) return
   if (!bcForm.title || !bcForm.content) { ElMessage.warning('请填写广播标题与内容'); return }
   const no = `GB${nowStamp()}${String((store.table('broadcasts') as any[]).length + 1).padStart(3, '0')}`
   const b = store.insert('broadcasts', {
@@ -548,7 +548,7 @@ function openClose() {
 }
 function saveClose() {
   const it = current.value
-  if (!it) return
+  if (!it || !requireHandle()) return
   store.update('incidents', it.id, { status: 'CLOSED', closeType: closeForm.closeType, closedAt: iso() }, {
     action: '关闭事件', remark: `关闭方式：${closeForm.closeType}；${closeForm.comment}`
   })

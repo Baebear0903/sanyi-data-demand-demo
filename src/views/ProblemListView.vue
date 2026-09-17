@@ -26,6 +26,13 @@ const list = (v: unknown): any[] => (Array.isArray(v) ? v : [])
 
 type Tone = 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'purple' | 'teal' | 'neutral'
 
+/**
+ * 问题处理权限（与问题单详情页 canManage 同口径）。
+ * 「问题管理」菜单放开的只是查看（problem.view），页面上所有写入口都按此收口：
+ * 新建问题、行操作（分派 / 升级 / 转入已知错误 / 解决 / 提交知识 / 关闭）、处理抽屉底部动作区。
+ */
+const canManage = computed(() => store.can('problem.manage') || store.can('problem.rootcause'))
+
 /* ------------------------------------------------------------ 选项 -- */
 type DictLike = Record<string, { label: string }>
 /** 字典转下拉选项（显式标注参数类型，避免 config.dicts 类型推断变化带来的噪音） */
@@ -412,7 +419,7 @@ function submitNotify() {
 /* --------------------------------------------------------- 行操作 -- */
 function actionsOf(p: any): { label: string; type?: string; run: () => void }[] {
   const out: { label: string; type?: string; run: () => void }[] = []
-  const can = store.can('problem.manage') || store.can('problem.rootcause')
+  const can = canManage.value
   if (can && ['NEW', 'DISPATCHED'].includes(p.status)) out.push({ label: p.status === 'NEW' ? '分派' : '重新分派', run: () => assign(p) })
   if (can && p.status === 'ANALYZING') out.push({ label: '转入已知错误', run: () => openKnownError(p) })
   if (can && ['ANALYZING', 'KNOWN_ERROR'].includes(p.status)) out.push({ label: '解决', type: 'primary', run: () => openSolve(p) })
@@ -430,7 +437,7 @@ function exportList() { ElMessage.success(`已导出 ${filtered.value.length} �
     <PageHead title="问题管理" desc="问题的根因分析、已知错误流转、解决方案与预防措施。">
       <template #actions>
         <el-button @click="exportList"><el-icon><Download /></el-icon> 导出</el-button>
-        <el-button type="primary" @click="createVisible = true"><el-icon><Plus /></el-icon> 新建问题</el-button>
+        <el-button type="primary" :disabled="!canManage" @click="createVisible = true"><el-icon><Plus /></el-icon> 新建问题</el-button>
       </template>
     </PageHead>
 
@@ -794,13 +801,15 @@ function exportList() { ElMessage.success(`已导出 ${filtered.value.length} �
           该问题单已关闭（终态）：关闭 / 解决 / 转入已知错误流程已停用；如需继续跟进，可发送通知或提交知识条目。
         </div>
         <div class="drawer-actions">
-          <el-button @click="assign(current)">分派 / 重新分派</el-button>
-          <el-button @click="escalate(current)">问题升级</el-button>
-          <el-button :disabled="current.status === 'CLOSED'" @click="openKnownError(current)">转入已知错误流程</el-button>
-          <el-button type="primary" :disabled="current.status === 'CLOSED'" @click="openSolve(current)">解决</el-button>
-          <el-button :disabled="current.status === 'CLOSED'" @click="openClose(current)">关闭</el-button>
-          <el-button type="success" plain @click="openKnowledge(current)">提交知识条目</el-button>
-          <el-button @click="openNotify(current)">通知</el-button>
+          <template v-if="canManage">
+            <el-button @click="assign(current)">分派 / 重新分派</el-button>
+            <el-button @click="escalate(current)">问题升级</el-button>
+            <el-button :disabled="current.status === 'CLOSED'" @click="openKnownError(current)">转入已知错误流程</el-button>
+            <el-button type="primary" :disabled="current.status === 'CLOSED'" @click="openSolve(current)">解决</el-button>
+            <el-button :disabled="current.status === 'CLOSED'" @click="openClose(current)">关闭</el-button>
+            <el-button type="success" plain @click="openKnowledge(current)">提交知识条目</el-button>
+            <el-button @click="openNotify(current)">通知</el-button>
+          </template>
           <el-button link type="primary" @click="router.push(`/problem/detail/${current.id}`)">打开详情页 <el-icon><ArrowRight /></el-icon></el-button>
         </div>
       </template>

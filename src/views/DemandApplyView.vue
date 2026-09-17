@@ -245,6 +245,7 @@ function nextNo(): string {
 }
 
 function submit(draft = false) {
+  if (!store.can('demand.apply')) { ElMessage.warning('当前角色无「提交需求申请」权限'); return }
   if (draft) {
     ElMessageBox.confirm('将保存为草稿（状态：草稿），可在「需求单管理」中继续编辑后提交。', '保存草稿', { type: 'info' })
       .then(() => createDemand(true))
@@ -372,7 +373,7 @@ const deliverable = computed(() => {
     >
       <template #actions>
         <el-button @click="router.push('/demand/list')">需求单管理</el-button>
-        <el-button type="primary" plain @click="submit(true)">存为草稿</el-button>
+        <el-button type="primary" plain :disabled="!store.can('demand.apply')" @click="submit(true)">存为草稿</el-button>
       </template>
     </PageHead>
 
@@ -812,8 +813,8 @@ const deliverable = computed(() => {
               提交后自动生成需求单号并通知服务台受理
             </span>
             <span class="card__spacer" />
-            <el-button @click="submit(true)">存为草稿</el-button>
-            <el-button type="primary" @click="submit(false)">提交申请</el-button>
+            <el-button :disabled="!store.can('demand.apply')" @click="submit(true)">存为草稿</el-button>
+            <el-button type="primary" :disabled="!store.can('demand.apply')" @click="submit(false)">提交申请</el-button>
           </div>
         </div>
 

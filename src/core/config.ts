@@ -473,10 +473,10 @@ export const config: AppConfig = {
         icon: 'Service',
         desc: '事件、问题、发布与知识库',
         menu: [
-          { key: 'incident-list', title: '事件管理', icon: 'Warning', perm: 'incident.handle', route: '/incident/list' },
+          { key: 'incident-list', title: '事件管理', icon: 'Warning', perm: 'incident.view', route: '/incident/list' },
           { key: 'incident-config', title: '事件分类与模板', icon: 'Grid', hide: true, perm: 'incident.dispatch', route: '/incident/config' },
-          { key: 'problem-list', title: '问题管理', icon: 'QuestionFilled', perm: 'problem.manage', route: '/problem/list' },
-          { key: 'release-list', title: '发布管理', icon: 'Promotion', perm: 'release.manage', route: '/release/list' },
+          { key: 'problem-list', title: '问题管理', icon: 'QuestionFilled', perm: 'problem.view', route: '/problem/list' },
+          { key: 'release-list', title: '发布管理', icon: 'Promotion', perm: 'release.view', route: '/release/list' },
           { key: 'kb-list', title: '知识库管理', icon: 'Reading', perm: 'kb.share', route: '/kb/list' },
           { key: 'kb-qna', title: '知识问答管理', icon: 'ChatLineSquare', hide: true, perm: 'kb.share', route: '/kb/qna' }
         ]

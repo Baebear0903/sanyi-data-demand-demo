@@ -231,7 +231,7 @@ function exportList() {
     >
       <template #actions>
         <el-button @click="exportList"><el-icon><Download /></el-icon> 导出</el-button>
-        <el-button type="primary" @click="router.push('/demand/apply')"><el-icon><Plus /></el-icon> 新建需求</el-button>
+        <el-button type="primary" :disabled="!store.can('demand.apply')" @click="router.push('/demand/apply')"><el-icon><Plus /></el-icon> 新建需求</el-button>
       </template>
     </PageHead>
 

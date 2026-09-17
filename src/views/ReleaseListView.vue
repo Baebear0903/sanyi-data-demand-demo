@@ -22,6 +22,13 @@ const route = useRoute()
 
 type Tone = 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'purple' | 'teal' | 'neutral'
 
+/**
+ * 发布管理权限（与发布单详情页 canManage 同口径）。
+ * 「发布管理」菜单放开的只是查看（release.view），写入口仍按 release.manage 收口：
+ * 新建发布申请、行操作「审批批复 / 执行升级」。
+ */
+const canManage = computed(() => store.can('release.manage'))
+
 /** 安全取数组（模板统一使用） */
 const list = (v: unknown): any[] => (Array.isArray(v) ? v : [])
 
@@ -209,8 +216,8 @@ function execute(r: any) {
 
 function actionsOf(r: any): { label: string; type?: string; run: () => void }[] {
   const out: { label: string; type?: string; run: () => void }[] = []
-  if (r.status === 'APPLYING' && store.can('release.manage')) out.push({ label: '审批批复', type: 'primary', run: () => approve(r) })
-  if (r.status === 'APPROVED' && store.can('release.manage')) out.push({ label: '执行升级', type: 'primary', run: () => execute(r) })
+  if (r.status === 'APPLYING' && canManage.value) out.push({ label: '审批批复', type: 'primary', run: () => approve(r) })
+  if (r.status === 'APPROVED' && canManage.value) out.push({ label: '执行升级', type: 'primary', run: () => execute(r) })
   if (['RELEASED', 'VERIFYING'].includes(r.status)) out.push({ label: '业务验证', type: 'primary', run: () => router.push(`/release/detail/${r.id}`) })
   if (r.status === 'ROLLED_BACK') out.push({ label: '重新发布', run: () => router.push(`/release/detail/${r.id}`) })
   out.push({ label: '详情', run: () => router.push(`/release/detail/${r.id}`) })
@@ -232,7 +239,7 @@ function passRate(r: any): number {
     <PageHead title="发布管理" desc="发布申请、升级执行、验证与回滚。">
       <template #actions>
         <el-button @click="exportList"><el-icon><Download /></el-icon> 导出</el-button>
-        <el-button type="primary" @click="resetForm(); createVisible = true"><el-icon><Plus /></el-icon> 新建发布申请</el-button>
+        <el-button type="primary" :disabled="!canManage" @click="resetForm(); createVisible = true"><el-icon><Plus /></el-icon> 新建发布申请</el-button>
       </template>
     </PageHead>
 
