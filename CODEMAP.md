@@ -88,7 +88,6 @@
 | `featureList.ts` | **生成物**：功能清单真源，由 `scripts/gen-feature-list.mjs` 生成，**禁止手改** |
 | `recipes.ts` | 功能点覆盖说明的类型与入口 |
 | `recipesData.ts` | 69 行功能点的覆盖说明数据（纯数据） |
-| `recipesExtra.ts` | 补齐遗漏的 4 个功能点配方（2.7、3.1–3.3） |
 | `recipeHelpers.ts` | 覆盖说明的展示辅助（菜单路径、角色名） |
 | `reference.ts` | 覆盖表数据（清单原文 + 实现说明 + 原文依据） |
 

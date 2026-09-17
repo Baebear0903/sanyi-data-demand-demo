@@ -138,7 +138,6 @@ demo/                              # ← 本目录就是 GitHub 仓库的根目�
     │   ├── featureList.ts    # 功能清单文本（由 gen-feature-list.mjs 生成）
     │   ├── recipes.ts        # 功能点覆盖说明：类型定义 + 数据再导出
     │   ├── recipesData.ts    # 69 行功能点的覆盖说明数据（角色 / 页面 / 要点 / 示例）
-    │   ├── recipesExtra.ts   # 补齐遗漏的 4 个功能点配方（2.7 变更审计、3.1–3.3 任务管理）
     │   └── recipeHelpers.ts  # 覆盖说明的展示辅助（菜单路径、角色名）
     ├── mock/seed.ts          # ★ 演示种子数据（2200 行，全部 Mock；示例编号的唯一真源）
     ├── stores/

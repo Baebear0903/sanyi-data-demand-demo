@@ -1,13 +1,14 @@
 /**
- * gen-recipes.mjs —— 由各组的迁移结果生成 src/core/recipesData.ts
+ * gen-recipes.mjs —— ⚠ 已失效，请勿执行
  *
- * 输入：
- *  · /tmp/recipes-a.json … /tmp/recipes-e.json —— 各组的演示说明（条目行，按清单编号重键）
- *  · 本文件底部的 MODULE_ROWS          —— 11 个模块行（人工编写：只写"哪个角色、看哪个页面"）
+ * 为什么标为失效：
+ *  · 输入 `/tmp/recipes-a.json … /tmp/recipes-e.json` 是当时迁移用的临时文件，现已不存在，脚本跑不起来；
+ *  · 本文件底部的 MODULE_ROWS 与 `src/core/recipesData.ts` 的现状**不同步**（模块行文案后续被人工修订过）；
+ *  · 一旦补齐输入再执行，会整体覆盖 `src/core/recipesData.ts`，把现行文案回退成过期版本。
  *
- * 用法：cd demo && node scripts/gen-recipes.mjs
- *
- * 输出：src/core/recipesData.ts（纯数据，供 scripts/check-recipes.mjs 静态校验）
+ * 现状：`src/core/recipesData.ts` 改为**人工维护**（已删除它的 `recipesExtra.ts` 分片），
+ *   改完用 `node scripts/check-recipes.mjs` 校验（键集合 / 角色 / 页面 / 文案出处 / 示例编号）。
+ * 保留原因：MODULE_ROWS 可作为模块行文案的历史参考。
  */
 import fs from 'node:fs'
 import path from 'node:path'
